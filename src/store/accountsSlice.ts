@@ -2,29 +2,14 @@ import { create } from 'zustand';
 import type { Account } from '../types';
 import { getDatabase } from '../db/migrations';
 
-/**
- * Slice рахунків у Zustand.
- *
- * Zustand працює так:
- * - стан і методи описані в одному об'єкті
- * - будь-який компонент може підписатися через useAccountsStore()
- * - зміна стану → автоматичний ре-рендер підписаних компонентів
- */
-
 interface AccountsState {
   accounts: Account[];
   isLoading: boolean;
 
-  /** Завантажити всі рахунки з SQLite */
   loadAccounts: () => void;
-
-  /** Додати новий рахунок */
   addAccount: (account: Omit<Account, 'id' | 'createdAt'>) => void;
-
-  /** Оновити баланс рахунку */
   updateBalance: (accountId: string, balance: number) => void;
-
-  /** Видалити рахунок (м'яке видалення — is_active = 0) */
+  updateDisplay: (accountId: string, displayName: string, color?: string) => void;
   deactivateAccount: (accountId: string) => void;
 }
 
@@ -40,12 +25,14 @@ export const useAccountsStore = create<AccountsState>((set) => ({
         is_active: number;
         external_id: string | null;
         created_at: number;
+        display_name: string | null;
+        color: string | null;
       }>(
-        `SELECT id, platform, name, currency, iban, external_id, balance, is_active, created_at
+        `SELECT id, platform, name, currency, iban, external_id, balance, is_active, created_at,
+                display_name, color
          FROM accounts WHERE is_active = 1 ORDER BY created_at ASC`
       );
 
-      // Перетворюємо snake_case з SQLite на camelCase TypeScript
       const accounts: Account[] = rows.map((r) => ({
         id: r.id,
         platform: r.platform,
@@ -56,6 +43,8 @@ export const useAccountsStore = create<AccountsState>((set) => ({
         balance: r.balance ?? undefined,
         isActive: r.is_active === 1,
         createdAt: r.created_at,
+        displayName: r.display_name ?? undefined,
+        color: r.color ?? undefined,
       }));
 
       set({ accounts, isLoading: false });
@@ -87,6 +76,26 @@ export const useAccountsStore = create<AccountsState>((set) => ({
     set((state) => ({
       accounts: state.accounts.map((a) =>
         a.id === accountId ? { ...a, balance } : a
+      ),
+    }));
+  },
+
+  updateDisplay: (accountId, displayName, color) => {
+    const db = getDatabase();
+    if (color !== undefined) {
+      db.runSync(
+        `UPDATE accounts SET display_name = ?, color = ? WHERE id = ?`,
+        [displayName, color, accountId]
+      );
+    } else {
+      db.runSync(
+        `UPDATE accounts SET display_name = ? WHERE id = ?`,
+        [displayName, accountId]
+      );
+    }
+    set((state) => ({
+      accounts: state.accounts.map((a) =>
+        a.id === accountId ? { ...a, displayName, ...(color !== undefined ? { color } : {}) } : a
       ),
     }));
   },

@@ -6,19 +6,20 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import type { RootTabParamList } from './AppNavigator';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const TAB_CONFIG: Record<
+const TAB_ICONS: Record<
   keyof RootTabParamList,
-  { icon: IconName; iconOff: IconName; label: string }
+  { icon: IconName; iconOff: IconName }
 > = {
-  Dashboard:    { icon: 'home',           iconOff: 'home-outline',           label: 'Головна'      },
-  Transactions: { icon: 'list',           iconOff: 'list-outline',           label: 'Транзакції'   },
-  Planner:      { icon: 'calendar',       iconOff: 'calendar-outline',       label: 'Планер'       },
-  Analytics:    { icon: 'bar-chart',      iconOff: 'bar-chart-outline',      label: 'Аналітика'    },
-  Settings:     { icon: 'settings-sharp', iconOff: 'settings-outline',       label: 'Налашт.'      },
+  Dashboard:    { icon: 'home',           iconOff: 'home-outline'     },
+  Transactions: { icon: 'list',           iconOff: 'list-outline'     },
+  Planner:      { icon: 'calendar',       iconOff: 'calendar-outline' },
+  Analytics:    { icon: 'bar-chart',      iconOff: 'bar-chart-outline'},
+  Settings:     { icon: 'settings-sharp', iconOff: 'settings-outline' },
 };
 
 const ISLAND_WIDTH  = Dimensions.get('window').width - 32;
@@ -27,9 +28,19 @@ const TAB_W         = ISLAND_WIDTH / TAB_COUNT;
 
 export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme } = useTheme();
+  const { t }     = useLanguage();
   const insets    = useSafeAreaInsets();
 
-  const indicatorX = useRef(new Animated.Value(state.index * TAB_W)).current;
+  const TAB_LABELS: Record<keyof RootTabParamList, string> = {
+    Dashboard:    t.tabDashboard,
+    Transactions: t.tabTransactions,
+    Planner:      t.tabPlanner,
+    Analytics:    t.tabAnalytics,
+    Settings:     t.tabSettings,
+  };
+
+  const indicatorX  = useRef(new Animated.Value(state.index * TAB_W)).current;
+  const indicatorOff = useRef(new Animated.Value(8)).current;
 
   useEffect(() => {
     Animated.spring(indicatorX, {
@@ -53,13 +64,14 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
           style={[
             styles.indicator,
             { backgroundColor: theme.accent + '28', width: TAB_W - 16 },
-            { transform: [{ translateX: Animated.add(indicatorX, new Animated.Value(8)) }] },
+            { transform: [{ translateX: Animated.add(indicatorX, indicatorOff) }] },
           ]}
         />
 
         {state.routes.map((route, index) => {
           const focused  = state.index === index;
-          const config   = TAB_CONFIG[route.name as keyof RootTabParamList];
+          const icons    = TAB_ICONS[route.name as keyof RootTabParamList];
+          const label    = TAB_LABELS[route.name as keyof RootTabParamList];
           const opts     = descriptors[route.key].options;
           const color    = focused ? theme.accent : theme.subtext;
 
@@ -83,12 +95,12 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
             >
               <Animated.View style={styles.tabInner}>
                 <Ionicons
-                  name={focused ? config.icon : config.iconOff}
+                  name={focused ? icons.icon : icons.iconOff}
                   size={22}
                   color={color}
                 />
                 <Text style={[styles.tabLabel, { color }]} numberOfLines={1}>
-                  {config.label}
+                  {label}
                 </Text>
               </Animated.View>
             </TouchableOpacity>

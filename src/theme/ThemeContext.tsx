@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { getDatabase } from '../db/migrations';
-import { THEMES, ThemeKey, AppTheme, DEFAULT_ACCENT } from './index';
+import { THEMES, ThemeKey, AppTheme, DEFAULT_ACCENT, THEME_LABELS } from './index';
+
+// Re-export so other files can use THEME_LABELS from ThemeContext too
+export { THEME_LABELS };
 
 interface ThemeContextValue {
   themeKey: ThemeKey;

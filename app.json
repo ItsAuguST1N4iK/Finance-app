@@ -5,43 +5,34 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
-    "scheme": "financeapp",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#3b82f6"
+    },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.financecontrol.app",
-      "infoPlist": {
-        "NSFaceIDUsageDescription": "Використовується для розблокування застосунку",
-        "UIBackgroundModes": ["fetch", "processing"]
-      }
+      "bundleIdentifier": "com.financecontrol.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.financecontrol.app",
-      "permissions": [
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
-      ]
+      "package": "com.financecontrol.app"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "expo-sqlite",
       "expo-secure-store",
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "Дозвольте Finance Control використовувати Face ID"
-        }
-      ],
+      "expo-local-authentication",
       [
         "expo-notifications",
         {

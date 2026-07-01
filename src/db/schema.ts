@@ -18,6 +18,22 @@ export const SCHEMA_V2 = `
      CAST(strftime('%s','now') AS INTEGER) * 1000);
 `;
 
+export const SCHEMA_V3 = `
+  ALTER TABLE settings ADD COLUMN language             TEXT DEFAULT 'uk';
+  ALTER TABLE settings ADD COLUMN preferred_currencies TEXT DEFAULT '["USD","EUR","GBP"]';
+  ALTER TABLE accounts ADD COLUMN color                TEXT;
+  ALTER TABLE accounts ADD COLUMN display_name         TEXT;
+`;
+
+export const SCHEMA_V4 = `
+  ALTER TABLE settings ADD COLUMN base_currency_exchange TEXT DEFAULT 'UAH';
+`;
+
+export const SCHEMA_V5 = `
+  ALTER TABLE settings ADD COLUMN home_currency TEXT DEFAULT 'UAH';
+  ALTER TABLE planned_income ADD COLUMN plan_type TEXT DEFAULT 'income';
+`;
+
 export const SCHEMA_V1 = `
   -- Версіювання схеми (для майбутніх міграцій)
   CREATE TABLE IF NOT EXISTS _schema_version (

@@ -10,6 +10,7 @@ interface TransactionsFilter {
   dateTo?: number;
   accountId?: string;
   searchText?: string;
+  currency?: string;
 }
 
 interface TransactionsState {
@@ -56,6 +57,10 @@ function buildSelectQuery(filter: TransactionsFilter): { sql: string; params: SQ
   if (filter.searchText) {
     conditions.push('(description LIKE ? OR counterparty LIKE ?)');
     params.push(`%${filter.searchText}%`, `%${filter.searchText}%`);
+  }
+  if (filter.currency) {
+    conditions.push('currency = ?');
+    params.push(filter.currency);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

@@ -21,6 +21,9 @@ interface PlannedIncomeState {
   /** Видалити / скасувати */
   cancelItem: (id: string) => void;
 
+  /** Остаточно видалити запис з БД */
+  deleteItem: (id: string) => void;
+
   /**
    * Перевірити прострочені записи.
    * Викликається при кожному відкритті застосунку.
@@ -32,6 +35,7 @@ function rowToItem(r: Record<string, unknown>): PlannedIncome {
   return {
     id:                      r.id as string,
     accountId:               r.account_id as string,
+    planType:                ((r.plan_type as string | null) ?? 'income') as 'income' | 'expense',
     name:                    r.name as string,
     amount:                  r.amount as number,
     currency:                r.currency as string,
@@ -77,12 +81,13 @@ export const usePlannedIncomeStore = create<PlannedIncomeState>((set, get) => ({
 
     db.runSync(
       `INSERT INTO planned_income
-       (id, account_id, name, amount, currency, source, notes,
+       (id, account_id, plan_type, name, amount, currency, source, notes,
         expected_date, notify_days_before, recurrence, recurrence_day,
         recurrence_interval_days, status, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)`,
       [
-        id, data.accountId, data.name, data.amount, data.currency,
+        id, data.accountId, data.planType ?? 'income',
+        data.name, data.amount, data.currency,
         data.source ?? null, data.notes ?? null,
         data.expectedDate, data.notifyDaysBefore, data.recurrence,
         data.recurrenceDay ?? null, data.recurrenceIntervalDays ?? null,
@@ -119,6 +124,16 @@ export const usePlannedIncomeStore = create<PlannedIncomeState>((set, get) => ({
 
   cancelItem: (id) => {
     get().updateStatus(id, 'cancelled');
+    set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
+  },
+
+  deleteItem: (id) => {
+    try {
+      const db = getDatabase();
+      db.runSync('DELETE FROM planned_income WHERE id = ?', [id]);
+    } catch (e) {
+      console.error('[plannedIncomeSlice] deleteItem error:', e);
+    }
     set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
   },
 

@@ -48,6 +48,8 @@ export interface Account {
   balance?: number;    // останній відомий залишок
   isActive: boolean;
   createdAt: number;   // Unix timestamp (ms)
+  displayName?: string; // user-editable label shown under card number
+  color?: string;       // user-chosen hex color for the card
 }
 
 // ─────────────────────────────────────────────
@@ -91,6 +93,7 @@ export interface PlannedIncome {
   id: string;
   accountId: string;
 
+  planType: 'income' | 'expense'; // тип: надходження або витрата
   name: string;        // 'Зарплата', 'Оплата від Клієнта А'
   amount: number;
   currency: string;
@@ -160,5 +163,14 @@ export interface AnalyticsFilters {
   currency?: string;
   dateFrom: number;                  // Unix timestamp
   dateTo: number;
-  periodPreset?: 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'all';
+  periodPreset?: 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'all' | 'custom';
+  chartMode?: 'daily' | 'monthly';   // for year view: daily vs monthly buckets
+  chartType?: 'income' | 'expense';  // which series to show in chart
+}
+
+export interface ExchangeRate {
+  currencyCode: string;
+  rateBuy: number;
+  rateSell: number;
+  updatedAt: number;
 }

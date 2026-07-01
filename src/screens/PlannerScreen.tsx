@@ -1,25 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  Modal, TextInput, ScrollView,
+  Modal, TextInput, ScrollView, LayoutAnimation, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlannedIncomeStore } from '../store/plannedIncomeSlice';
 import { useAccountsStore }      from '../store/accountsSlice';
 import { useTheme }              from '../theme/ThemeContext';
+import { useLanguage }           from '../i18n/LanguageContext';
 import { useAppAlert }           from '../components/AppAlert';
 import type { PlannedIncome, PlannedIncomeStatus, RecurrenceType } from '../types';
 import { format, addDays } from 'date-fns';
 import { uk } from 'date-fns/locale';
 
-const STATUS_LABELS: Record<PlannedIncomeStatus, string> = {
-  pending:         '⏳ Очікується',
-  matched:         '✅ Отримано',
-  received_manual: '✅ Підтверджено',
-  overdue:         '⚠️ Прострочено',
-  cancelled:       '✗ Скасовано',
-};
 
 // ─── Planner Card ─────────────────────────────────
 
@@ -27,24 +22,41 @@ function PlannerCard({
   item,
   onConfirm,
   onCancel,
+  onDelete,
 }: {
   item:      PlannedIncome;
   onConfirm: (id: string) => void;
   onCancel:  (id: string) => void;
+  onDelete:  (id: string) => void;
 }) {
   const { theme } = useTheme();
+  const { t }     = useLanguage();
+
+  const isExpense = item.planType === 'expense';
+
+  const STATUS_LABELS: Record<PlannedIncomeStatus, string> = {
+    pending:         '⏳ Очікується',
+    matched:         isExpense ? '✅ Оплачено' : '✅ Отримано',
+    received_manual: isExpense ? '✅ Оплачено' : '✅ Підтверджено',
+    overdue:         '⚠️ Прострочено',
+    cancelled:       '✗ Скасовано',
+  };
 
   const STATUS_COLORS: Record<PlannedIncomeStatus, string> = {
-    pending:         theme.accent,
-    matched:         theme.income,
-    received_manual: theme.income,
+    pending:         isExpense ? theme.warning : theme.accent,
+    matched:         isExpense ? theme.expense : theme.income,
+    received_manual: isExpense ? theme.expense : theme.income,
     overdue:         theme.expense,
     cancelled:       theme.subtext,
   };
 
-  const daysLeft = Math.ceil((item.expectedDate - Date.now()) / (1000 * 60 * 60 * 24));
+  const daysLeft  = Math.ceil((item.expectedDate - Date.now()) / (1000 * 60 * 60 * 24));
   const isPending = item.status === 'pending';
   const isOverdue = item.status === 'overdue';
+  const isDone    = item.status === 'matched' || item.status === 'received_manual' || item.status === 'cancelled';
+
+  const amountColor = isExpense ? theme.expense : theme.income;
+  const amountSign  = isExpense ? '−' : '+';
 
   return (
     <View style={[styles.card, {
@@ -52,13 +64,20 @@ function PlannerCard({
       borderLeftColor: STATUS_COLORS[item.status],
     }]}>
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardName, { color: theme.text }]}>{item.name}</Text>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons
+            name={isExpense ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'}
+            size={15}
+            color={amountColor}
+          />
+          <Text style={[styles.cardName, { color: theme.text }]}>{item.name}</Text>
+        </View>
         <Text style={[styles.cardStatus, { color: STATUS_COLORS[item.status] }]}>
           {STATUS_LABELS[item.status]}
         </Text>
       </View>
-      <Text style={[styles.cardAmount, { color: theme.income }]}>
-        {item.amount.toLocaleString('uk-UA')} {item.currency}
+      <Text style={[styles.cardAmount, { color: amountColor }]}>
+        {amountSign}{item.amount.toLocaleString('uk-UA')} {item.currency}
       </Text>
       <View style={styles.cardMeta}>
         <Text style={[styles.cardDate, { color: theme.subtext }]}>
@@ -69,21 +88,39 @@ function PlannerCard({
         )}
         {isOverdue && <Text style={[styles.cardDaysLeft, { color: theme.expense }]}>прострочено</Text>}
       </View>
-      {item.source && <Text style={[styles.cardSource, { color: theme.subtext }]}>Від: {item.source}</Text>}
-      {item.notes  && <Text style={[styles.cardNotes, { color: theme.subtext }]}>{item.notes}</Text>}
-
-      {(isPending || isOverdue) && (
-        <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.btnConfirm} onPress={() => onConfirm(item.id)}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={theme.income} />
-            <Text style={[styles.btnText, { color: theme.income }]}>Отримано</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btnCancel} onPress={() => onCancel(item.id)}>
-            <Ionicons name="close-circle-outline" size={16} color={theme.expense} />
-            <Text style={[styles.btnText, { color: theme.expense }]}>Скасувати</Text>
-          </TouchableOpacity>
-        </View>
+      {item.source && (
+        <Text style={[styles.cardSource, { color: theme.subtext }]}>
+          {isExpense ? 'Куди:' : 'Від:'} {item.source}
+        </Text>
       )}
+      {item.notes && <Text style={[styles.cardNotes, { color: theme.subtext }]}>{item.notes}</Text>}
+
+      <View style={styles.cardActions}>
+        {(isPending || isOverdue) && (
+          <>
+            <TouchableOpacity style={styles.btnConfirm} onPress={() => onConfirm(item.id)} activeOpacity={0.75}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={isExpense ? theme.expense : theme.income} />
+              <Text style={[styles.btnText, { color: isExpense ? theme.expense : theme.income }]}>
+                {isExpense ? t.plannerPaid : 'Отримано'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnCancel} onPress={() => onCancel(item.id)} activeOpacity={0.75}>
+              <Ionicons name="close-circle-outline" size={16} color={theme.subtext} />
+              <Text style={[styles.btnText, { color: theme.subtext }]}>Скасувати</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {/* Trash icon only for completed/cancelled items */}
+        {isDone && (
+          <TouchableOpacity
+            style={[styles.btnDelete, { borderColor: theme.border, marginLeft: 'auto' as any }]}
+            onPress={() => onDelete(item.id)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="trash-outline" size={15} color={theme.expense} />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -92,10 +129,12 @@ function PlannerCard({
 
 function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme }  = useTheme();
+  const { t }      = useLanguage();
   const { addItem } = usePlannedIncomeStore();
   const { accounts } = useAccountsStore();
   const { show, element: alertEl } = useAppAlert();
 
+  const [planType,   setPlanType]   = useState<'income' | 'expense'>('income');
   const [name,       setName]       = useState('');
   const [amount,     setAmount]     = useState('');
   const [currency,   setCurrency]   = useState('UAH');
@@ -132,6 +171,7 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
     const expectedDate = addDays(new Date(), parseInt(daysAhead, 10) || 7).setHours(9, 0, 0, 0);
     addItem({
       accountId: resolvedAccountId,
+      planType,
       name: name.trim(),
       amount: parseFloat(amount.replace(',', '.')),
       currency,
@@ -144,24 +184,53 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
 
     onClose();
     setName(''); setAmount(''); setSource(''); setNotes('');
-    setAccountId(''); setDaysAhead('7'); setRecurrence('once');
+    setAccountId(''); setDaysAhead('7'); setRecurrence('once'); setPlanType('income');
   }
 
   const visibleAccounts = accounts.filter((a) => a.id !== 'acc_default');
 
+  const isExpense = planType === 'expense';
+
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       {alertEl}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
         <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Нове надходження</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {isExpense ? t.plannerAddExpense : t.plannerAddIncome}
+            </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Plan type toggle */}
+          <View style={[styles.typeToggleRow, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
+            <TouchableOpacity
+              style={[styles.typeBtn, !isExpense && { backgroundColor: theme.income }]}
+              onPress={() => setPlanType('income')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-down-circle-outline" size={16} color={!isExpense ? '#fff' : theme.subtext} />
+              <Text style={[styles.typeBtnText, { color: !isExpense ? '#fff' : theme.subtext }]}>
+                {t.plannerIncome}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.typeBtn, isExpense && { backgroundColor: theme.expense }]}
+              onPress={() => setPlanType('expense')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-up-circle-outline" size={16} color={isExpense ? '#fff' : theme.subtext} />
+              <Text style={[styles.typeBtnText, { color: isExpense ? '#fff' : theme.subtext }]}>
+                {t.plannerExpense}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={[styles.label, { color: theme.subtext }]}>Назва *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
@@ -222,10 +291,12 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
               keyboardType="number-pad"
             />
 
-            <Text style={[styles.label, { color: theme.subtext }]}>Джерело</Text>
+            <Text style={[styles.label, { color: theme.subtext }]}>
+              {isExpense ? 'Куди / на що' : 'Джерело'}
+            </Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder="Від кого / звідки"
+              placeholder={isExpense ? 'Оренда, підписка...' : 'Від кого / звідки'}
               placeholderTextColor={theme.subtext}
               value={source}
               onChangeText={setSource}
@@ -259,14 +330,17 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
             </View>
 
             <TouchableOpacity
-              style={[styles.addBtn, { backgroundColor: theme.accent }]}
+              style={[styles.addBtn, { backgroundColor: isExpense ? theme.expense : theme.income }]}
               onPress={handleAdd}
             >
-              <Text style={styles.addBtnText}>Додати надходження</Text>
+              <Text style={styles.addBtnText}>
+                {isExpense ? t.plannerAddExpense : t.plannerAddIncome}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -275,7 +349,8 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
 
 export function PlannerScreen() {
   const { theme } = useTheme();
-  const { items, loadItems, updateStatus, cancelItem } = usePlannedIncomeStore();
+  const { t }     = useLanguage();
+  const { items, loadItems, updateStatus, cancelItem, deleteItem } = usePlannedIncomeStore();
   const { loadAccounts } = useAccountsStore();
   const [showModal, setShowModal] = useState(false);
   const { show, element: alertEl } = useAppAlert();
@@ -287,15 +362,40 @@ export function PlannerScreen() {
 
   function handleConfirm(id: string) {
     show('Підтвердження', 'Позначити надходження як отримане?', [
-      { text: 'Скасувати', style: 'cancel' },
-      { text: 'Так', onPress: () => updateStatus(id, 'received_manual') },
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: 'Так',
+        onPress: () => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          updateStatus(id, 'received_manual');
+        },
+      },
     ]);
   }
 
   function handleCancel(id: string) {
     show('Скасування', 'Скасувати планове надходження?', [
       { text: 'Ні', style: 'cancel' },
-      { text: 'Скасувати', style: 'destructive', onPress: () => cancelItem(id) },
+      {
+        text: t.cancel, style: 'destructive',
+        onPress: () => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          cancelItem(id);
+        },
+      },
+    ]);
+  }
+
+  function handleDelete(id: string) {
+    show(t.plannerDeleteConfirm, t.plannerDeleteHint, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.delete, style: 'destructive',
+        onPress: () => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          deleteItem(id);
+        },
+      },
     ]);
   }
 
@@ -309,7 +409,7 @@ export function PlannerScreen() {
         data={[...pending, ...done]}
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => (
-          <PlannerCard item={item} onConfirm={handleConfirm} onCancel={handleCancel} />
+          <PlannerCard item={item} onConfirm={handleConfirm} onCancel={handleCancel} onDelete={handleDelete} />
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -349,9 +449,14 @@ const styles = StyleSheet.create({
   cardDaysLeft: { fontSize: 13, marginLeft: 8 },
   cardSource:   { fontSize: 13, marginTop: 4 },
   cardNotes:    { fontSize: 13, fontStyle: 'italic', marginTop: 4 },
-  cardActions:  { flexDirection: 'row', marginTop: 12, gap: 12 },
+  cardActions:  { flexDirection: 'row', marginTop: 12, gap: 12, alignItems: 'center' },
   btnConfirm:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
   btnCancel:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  btnDelete:    {
+    marginLeft: 'auto',
+    borderRadius: 8, borderWidth: 1,
+    padding: 6, alignItems: 'center', justifyContent: 'center',
+  },
   btnText:      { fontSize: 13, fontWeight: '500' },
 
   emptyState:    { alignItems: 'center', paddingVertical: 60 },
@@ -370,7 +475,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, maxHeight: '92%',
   },
-  modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  typeToggleRow:   { flexDirection: 'row', borderRadius: 12, borderWidth: 1, overflow: 'hidden', marginBottom: 16 },
+  typeBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
+  typeBtnText:     { fontSize: 14, fontWeight: '600' },
   modalTitle:   { fontSize: 18, fontWeight: '700' },
   label:        { fontSize: 13, marginBottom: 6, marginTop: 12 },
   input: {
