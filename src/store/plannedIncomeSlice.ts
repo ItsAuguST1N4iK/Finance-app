@@ -24,6 +24,9 @@ interface PlannedIncomeState {
   /** Остаточно видалити запис з БД */
   deleteItem: (id: string) => void;
 
+  /** Оновити поля планового запису */
+  updateItem: (id: string, data: Partial<Omit<PlannedIncome, 'id' | 'createdAt' | 'updatedAt' | 'status'>>) => void;
+
   /**
    * Перевірити прострочені записи.
    * Викликається при кожному відкритті застосунку.
@@ -135,6 +138,43 @@ export const usePlannedIncomeStore = create<PlannedIncomeState>((set, get) => ({
       console.error('[plannedIncomeSlice] deleteItem error:', e);
     }
     set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
+  },
+
+  updateItem: (id, data) => {
+    const db = getDatabase();
+    const now = Date.now();
+    db.runSync(
+      `UPDATE planned_income SET
+         account_id = COALESCE(?, account_id),
+         plan_type = COALESCE(?, plan_type),
+         name = COALESCE(?, name),
+         amount = COALESCE(?, amount),
+         currency = COALESCE(?, currency),
+         source = ?,
+         notes = ?,
+         expected_date = COALESCE(?, expected_date),
+         recurrence = COALESCE(?, recurrence),
+         updated_at = ?
+       WHERE id = ?`,
+      [
+        data.accountId ?? null,
+        data.planType ?? null,
+        data.name ?? null,
+        data.amount ?? null,
+        data.currency ?? null,
+        data.source ?? null,
+        data.notes ?? null,
+        data.expectedDate ?? null,
+        data.recurrence ?? null,
+        now,
+        id,
+      ]
+    );
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === id ? { ...item, ...data, updatedAt: now } : item
+      ),
+    }));
   },
 
   checkOverdue: () => {

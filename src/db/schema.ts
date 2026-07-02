@@ -34,6 +34,11 @@ export const SCHEMA_V5 = `
   ALTER TABLE planned_income ADD COLUMN plan_type TEXT DEFAULT 'income';
 `;
 
+export const SCHEMA_V6 = `
+  ALTER TABLE transactions ADD COLUMN tag TEXT;
+  CREATE INDEX IF NOT EXISTS idx_tx_tag ON transactions(tag);
+`;
+
 export const SCHEMA_V1 = `
   -- Версіювання схеми (для майбутніх міграцій)
   CREATE TABLE IF NOT EXISTS _schema_version (

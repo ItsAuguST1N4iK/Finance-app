@@ -17,24 +17,12 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      // #region agent log
-      fetch('http://127.0.0.1:7394/ingest/d7074d66-40c3-4a99-aa0d-e056b37ec457',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1ad59a'},body:JSON.stringify({sessionId:'1ad59a',location:'App.tsx:20',message:'init() started — JS is executing',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       try {
         await runMigrations();
-        // #region agent log
-        fetch('http://127.0.0.1:7394/ingest/d7074d66-40c3-4a99-aa0d-e056b37ec457',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1ad59a'},body:JSON.stringify({sessionId:'1ad59a',location:'App.tsx:23',message:'runMigrations() completed successfully',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         checkOverdue();
         setReady(true);
-        // #region agent log
-        fetch('http://127.0.0.1:7394/ingest/d7074d66-40c3-4a99-aa0d-e056b37ec457',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1ad59a'},body:JSON.stringify({sessionId:'1ad59a',location:'App.tsx:25',message:'setReady(true) — app fully initialized',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C,D'})}).catch(()=>{});
-        // #endregion
       } catch (e) {
         console.error('[App] init error:', e);
-        // #region agent log
-        fetch('http://127.0.0.1:7394/ingest/d7074d66-40c3-4a99-aa0d-e056b37ec457',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'1ad59a'},body:JSON.stringify({sessionId:'1ad59a',location:'App.tsx:29',message:'init() CAUGHT ERROR',data:{error:String(e),errorMessage:(e as Error)?.message,errorName:(e as Error)?.name},timestamp:Date.now(),runId:'run1',hypothesisId:'C,D,E'})}).catch(()=>{});
-        // #endregion
         setError(String(e));
       }
     }

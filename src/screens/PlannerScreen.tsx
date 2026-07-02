@@ -11,7 +11,7 @@ import { useAccountsStore }      from '../store/accountsSlice';
 import { useTheme }              from '../theme/ThemeContext';
 import { useLanguage }           from '../i18n/LanguageContext';
 import { useAppAlert }           from '../components/AppAlert';
-import type { PlannedIncome, PlannedIncomeStatus, RecurrenceType } from '../types';
+import type { PlannedIncome, PlannedIncomeStatus, RecurrenceType, Account } from '../types';
 import { format, addDays } from 'date-fns';
 import { uk } from 'date-fns/locale';
 
@@ -20,14 +20,18 @@ import { uk } from 'date-fns/locale';
 
 function PlannerCard({
   item,
+  account,
   onConfirm,
   onCancel,
   onDelete,
+  onEdit,
 }: {
   item:      PlannedIncome;
+  account:   Account | undefined;
   onConfirm: (id: string) => void;
   onCancel:  (id: string) => void;
   onDelete:  (id: string) => void;
+  onEdit:    (item: PlannedIncome) => void;
 }) {
   const { theme } = useTheme();
   const { t }     = useLanguage();
@@ -58,6 +62,8 @@ function PlannerCard({
   const amountColor = isExpense ? theme.expense : theme.income;
   const amountSign  = isExpense ? '−' : '+';
 
+  const accountLabel = account ? (account.displayName ?? account.name) : item.accountId;
+
   return (
     <View style={[styles.card, {
       backgroundColor: theme.card,
@@ -76,9 +82,11 @@ function PlannerCard({
           {STATUS_LABELS[item.status]}
         </Text>
       </View>
+
       <Text style={[styles.cardAmount, { color: amountColor }]}>
         {amountSign}{item.amount.toLocaleString('uk-UA')} {item.currency}
       </Text>
+
       <View style={styles.cardMeta}>
         <Text style={[styles.cardDate, { color: theme.subtext }]}>
           {format(item.expectedDate, 'd MMMM yyyy', { locale: uk })}
@@ -88,6 +96,15 @@ function PlannerCard({
         )}
         {isOverdue && <Text style={[styles.cardDaysLeft, { color: theme.expense }]}>прострочено</Text>}
       </View>
+
+      {/* Account name */}
+      <View style={[styles.cardAccountRow, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
+        <Ionicons name="card-outline" size={12} color={theme.subtext} />
+        <Text style={[styles.cardAccount, { color: theme.subtext }]} numberOfLines={1}>
+          {accountLabel}
+        </Text>
+      </View>
+
       {item.source && (
         <Text style={[styles.cardSource, { color: theme.subtext }]}>
           {isExpense ? 'Куди:' : 'Від:'} {item.source}
@@ -108,9 +125,15 @@ function PlannerCard({
               <Ionicons name="close-circle-outline" size={16} color={theme.subtext} />
               <Text style={[styles.btnText, { color: theme.subtext }]}>Скасувати</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btnEdit, { borderColor: theme.border, marginLeft: 'auto' as any }]}
+              onPress={() => onEdit(item)}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="pencil-outline" size={15} color={theme.accent} />
+            </TouchableOpacity>
           </>
         )}
-        {/* Trash icon only for completed/cancelled items */}
         {isDone && (
           <TouchableOpacity
             style={[styles.btnDelete, { borderColor: theme.border, marginLeft: 'auto' as any }]}
@@ -125,12 +148,20 @@ function PlannerCard({
   );
 }
 
-// ─── Add Modal ────────────────────────────────────
+// ─── Add / Edit Modal ─────────────────────────────
 
-function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+function PlannerFormModal({
+  visible,
+  editItem,
+  onClose,
+}: {
+  visible: boolean;
+  editItem: PlannedIncome | null;
+  onClose: () => void;
+}) {
   const { theme }  = useTheme();
   const { t }      = useLanguage();
-  const { addItem } = usePlannedIncomeStore();
+  const { addItem, updateItem } = usePlannedIncomeStore();
   const { accounts } = useAccountsStore();
   const { show, element: alertEl } = useAppAlert();
 
@@ -144,7 +175,28 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
   const [recurrence, setRecurrence] = useState<RecurrenceType>('once');
   const [daysAhead,  setDaysAhead]  = useState('7');
 
-  // Auto-select the first available account (including default)
+  const isEdit = editItem !== null;
+
+  useEffect(() => {
+    if (visible && editItem) {
+      setPlanType(editItem.planType);
+      setName(editItem.name);
+      setAmount(String(editItem.amount));
+      setCurrency(editItem.currency);
+      setSource(editItem.source ?? '');
+      setNotes(editItem.notes ?? '');
+      setAccountId(editItem.accountId);
+      setRecurrence(editItem.recurrence);
+      const diff = Math.ceil((editItem.expectedDate - Date.now()) / (1000 * 60 * 60 * 24));
+      setDaysAhead(String(Math.max(1, diff)));
+    } else if (visible && !editItem) {
+      setPlanType('income');
+      setName(''); setAmount(''); setSource(''); setNotes('');
+      setAccountId(''); setDaysAhead('7'); setRecurrence('once');
+      if (accounts.length > 0) setAccountId(accounts[0].id);
+    }
+  }, [visible, editItem]);
+
   useEffect(() => {
     if (!accountId && accounts.length > 0) {
       setAccountId(accounts[0].id);
@@ -155,51 +207,60 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
     once: 'Один раз', weekly: 'Щотижня', monthly: 'Щомісяця', custom: 'Кастомно',
   };
 
-  function handleAdd() {
+  function handleSave() {
     if (!name.trim() || !amount) {
       show('Помилка', 'Заповніть назву та суму.');
       return;
     }
-
-    // Resolve accountId — fall back to default if none selected
     const resolvedAccountId = accountId || accounts.find((a) => a.id === 'acc_default')?.id || accounts[0]?.id;
     if (!resolvedAccountId) {
-      show('Помилка', 'Не вдалося визначити рахунок. Спробуйте ще раз.');
+      show('Помилка', 'Не вдалося визначити рахунок.');
       return;
     }
-
     const expectedDate = addDays(new Date(), parseInt(daysAhead, 10) || 7).setHours(9, 0, 0, 0);
-    addItem({
-      accountId: resolvedAccountId,
-      planType,
-      name: name.trim(),
-      amount: parseFloat(amount.replace(',', '.')),
-      currency,
-      source: source.trim() || undefined,
-      notes:  notes.trim() || undefined,
-      expectedDate,
-      notifyDaysBefore: 1,
-      recurrence,
-    });
+
+    if (isEdit && editItem) {
+      updateItem(editItem.id, {
+        accountId: resolvedAccountId,
+        planType,
+        name: name.trim(),
+        amount: parseFloat(amount.replace(',', '.')),
+        currency,
+        source: source.trim() || undefined,
+        notes:  notes.trim() || undefined,
+        expectedDate,
+        recurrence,
+      });
+    } else {
+      addItem({
+        accountId: resolvedAccountId,
+        planType,
+        name: name.trim(),
+        amount: parseFloat(amount.replace(',', '.')),
+        currency,
+        source: source.trim() || undefined,
+        notes:  notes.trim() || undefined,
+        expectedDate,
+        notifyDaysBefore: 1,
+        recurrence,
+      });
+    }
 
     onClose();
-    setName(''); setAmount(''); setSource(''); setNotes('');
-    setAccountId(''); setDaysAhead('7'); setRecurrence('once'); setPlanType('income');
   }
 
   const visibleAccounts = accounts.filter((a) => a.id !== 'acc_default');
-
   const isExpense = planType === 'expense';
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       {alertEl}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
         <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
-              {isExpense ? t.plannerAddExpense : t.plannerAddIncome}
+              {isEdit ? t.plannerEditTitle : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={theme.text} />
@@ -258,10 +319,10 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
               </TouchableOpacity>
             </View>
 
-            {/* Account picker — only show if real accounts exist */}
+            {/* Account picker */}
             {visibleAccounts.length > 0 && (
               <>
-                <Text style={[styles.label, { color: theme.subtext }]}>Рахунок</Text>
+                <Text style={[styles.label, { color: theme.subtext }]}>{t.plannerAccount}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {visibleAccounts.map((a) => (
                     <TouchableOpacity
@@ -273,7 +334,7 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
                     >
                       <Text style={[styles.accountBtnText, { color: theme.text },
                         a.id === accountId && { color: '#fff' }]}>
-                        {a.name}
+                        {a.displayName ?? a.name}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -331,10 +392,10 @@ function AddPlannerModal({ visible, onClose }: { visible: boolean; onClose: () =
 
             <TouchableOpacity
               style={[styles.addBtn, { backgroundColor: isExpense ? theme.expense : theme.income }]}
-              onPress={handleAdd}
+              onPress={handleSave}
             >
               <Text style={styles.addBtnText}>
-                {isExpense ? t.plannerAddExpense : t.plannerAddIncome}
+                {isEdit ? t.save : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -351,8 +412,9 @@ export function PlannerScreen() {
   const { theme } = useTheme();
   const { t }     = useLanguage();
   const { items, loadItems, updateStatus, cancelItem, deleteItem } = usePlannedIncomeStore();
-  const { loadAccounts } = useAccountsStore();
-  const [showModal, setShowModal] = useState(false);
+  const { accounts, loadAccounts } = useAccountsStore();
+  const [showModal, setShowModal]   = useState(false);
+  const [editItem,  setEditItem]    = useState<PlannedIncome | null>(null);
   const { show, element: alertEl } = useAppAlert();
 
   useEffect(() => {
@@ -361,7 +423,9 @@ export function PlannerScreen() {
   }, []);
 
   function handleConfirm(id: string) {
-    show('Підтвердження', 'Позначити надходження як отримане?', [
+    const item = items.find((i) => i.id === id);
+    const isExpense = item?.planType === 'expense';
+    show('Підтвердження', isExpense ? 'Позначити як оплачено?' : 'Позначити надходження як отримане?', [
       { text: t.cancel, style: 'cancel' },
       {
         text: 'Так',
@@ -374,7 +438,7 @@ export function PlannerScreen() {
   }
 
   function handleCancel(id: string) {
-    show('Скасування', 'Скасувати планове надходження?', [
+    show('Скасування', 'Скасувати плановий запис?', [
       { text: 'Ні', style: 'cancel' },
       {
         text: t.cancel, style: 'destructive',
@@ -399,6 +463,19 @@ export function PlannerScreen() {
     ]);
   }
 
+  function handleEdit(item: PlannedIncome) {
+    setEditItem(item);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditItem(null);
+  }
+
+  // Build a map of accountId -> Account for quick lookup
+  const accountMap = new Map<string, Account>(accounts.map((a) => [a.id, a]));
+
   const pending = items.filter((i) => i.status === 'pending' || i.status === 'overdue');
   const done    = items.filter((i) => i.status === 'matched' || i.status === 'received_manual');
 
@@ -409,14 +486,21 @@ export function PlannerScreen() {
         data={[...pending, ...done]}
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => (
-          <PlannerCard item={item} onConfirm={handleConfirm} onCancel={handleCancel} onDelete={handleDelete} />
+          <PlannerCard
+            item={item}
+            account={accountMap.get(item.accountId)}
+            onConfirm={handleConfirm}
+            onCancel={handleCancel}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={48} color={theme.subtext} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>Планових надходжень немає</Text>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>Планових записів немає</Text>
             <Text style={[styles.emptySubtitle, { color: theme.subtext }]}>
-              Додайте очікувані надходження — зарплату, оплати від клієнтів, дивіденди
+              Додайте очікувані надходження або витрати
             </Text>
           </View>
         }
@@ -425,12 +509,16 @@ export function PlannerScreen() {
 
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: theme.accent }]}
-        onPress={() => setShowModal(true)}
+        onPress={() => { setEditItem(null); setShowModal(true); }}
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
 
-      <AddPlannerModal visible={showModal} onClose={() => setShowModal(false)} />
+      <PlannerFormModal
+        visible={showModal}
+        editItem={editItem}
+        onClose={closeModal}
+      />
     </SafeAreaView>
   );
 }
@@ -444,20 +532,29 @@ const styles = StyleSheet.create({
   cardName:     { fontSize: 16, fontWeight: '600', flex: 1 },
   cardStatus:   { fontSize: 12, fontWeight: '500' },
   cardAmount:   { fontSize: 22, fontWeight: '700', marginBottom: 6 },
-  cardMeta:     { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  cardMeta:     { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   cardDate:     { fontSize: 13 },
   cardDaysLeft: { fontSize: 13, marginLeft: 8 },
-  cardSource:   { fontSize: 13, marginTop: 4 },
+  cardAccountRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, alignSelf: 'flex-start', marginBottom: 6,
+  },
+  cardAccount:  { fontSize: 12 },
+  cardSource:   { fontSize: 13, marginTop: 2 },
   cardNotes:    { fontSize: 13, fontStyle: 'italic', marginTop: 4 },
   cardActions:  { flexDirection: 'row', marginTop: 12, gap: 12, alignItems: 'center' },
   btnConfirm:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
   btnCancel:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  btnDelete:    {
-    marginLeft: 'auto',
+  btnEdit: {
     borderRadius: 8, borderWidth: 1,
     padding: 6, alignItems: 'center', justifyContent: 'center',
   },
-  btnText:      { fontSize: 13, fontWeight: '500' },
+  btnDelete: {
+    borderRadius: 8, borderWidth: 1,
+    padding: 6, alignItems: 'center', justifyContent: 'center',
+  },
+  btnText: { fontSize: 13, fontWeight: '500' },
 
   emptyState:    { alignItems: 'center', paddingVertical: 60 },
   emptyTitle:    { fontSize: 18, fontWeight: '600', marginTop: 16 },

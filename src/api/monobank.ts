@@ -6,9 +6,15 @@
  *   - /personal/client-info : 1 req / 60 s
  *   - /personal/statement   : 1 req / 60 s per account
  * Statement max window = 31 days; for 90 days fetch = 3 requests × 60 s = 2+ min
+ *
+ * NOTE: The API only returns up to 90 days of history. Older transactions
+ * are not available through this API. Currency amounts are always in the
+ * account's native currency (e.g. EUR account shows EUR amounts).
+ * operationAmount is the charged amount in the original currency if different.
  */
 
 import type { Account, UnifiedTransaction } from '../types';
+import { autoDetectTag } from '../utils/tags';
 
 const BASE = 'https://api.monobank.ua';
 
@@ -21,10 +27,6 @@ const CURRENCY_MAP: Record<number, string> = {
 
 function isoAlpha(code: number): string {
   return CURRENCY_MAP[code] ?? String(code);
-}
-
-function detectType(amount: number): 'income' | 'expense' {
-  return amount > 0 ? 'income' : 'expense';
 }
 
 // ─── API response types ───────────────────────────
@@ -55,9 +57,9 @@ interface MonoStatement {
   mcc:             number;
   originalMcc:     number;
   hold:            boolean;
-  amount:          number;   // minor units
-  operationAmount: number;
-  currencyCode:    number;
+  amount:          number;   // minor units, in account currency
+  operationAmount: number;   // minor units, in operation currency (may differ)
+  currencyCode:    number;   // account currency ISO numeric
   commissionRate:  number;   // minor units
   cashbackAmount:  number;
   balance:         number;   // minor units
@@ -130,90 +132,47 @@ export async function fetchMonoStatement(
 }
 
 export function monoStatementToTx(
-  stmt:      MonoStatement,
+  stmt:              MonoStatement,
   internalAccountId: string,
+  ownIbans:          string[] = [],
+  ownAccounts?:      Account[],
 ): UnifiedTransaction {
-  const amount  = stmt.amount / 100;
-  const fee     = Math.abs(stmt.commissionRate / 100);
-  const now     = Date.now();
+  // `amount` is in the account's currency (e.g. EUR for a EUR account)
+  // This is the amount that actually affected the balance
+  const amount = stmt.amount / 100;
+  const fee    = Math.abs(stmt.commissionRate / 100);
+  const now    = Date.now();
+
+  // Detect self-transfer (counterIban is one of the user's own IBANs)
+  const isSelfTransfer = !!(stmt.counterIban && ownIbans.includes(stmt.counterIban));
+  const type = isSelfTransfer ? 'transfer' as const
+             : amount > 0     ? 'income'   as const
+             :                  'expense'  as const;
+
+  const tag = autoDetectTag(
+    stmt.mcc || undefined,
+    stmt.description || stmt.comment || undefined,
+    ownIbans,
+    stmt.counterIban,
+    ownAccounts,
+  );
 
   return {
     id:              `mono_${stmt.id}`,
     accountId:       internalAccountId,
     platform:        'monobank',
     externalId:      stmt.id,
-    type:            detectType(amount),
+    type,
     amount:          Math.abs(amount),
     currency:        isoAlpha(stmt.currencyCode),
     feeAmount:       fee,
     description:     stmt.description || stmt.comment || undefined,
     mcc:             stmt.mcc || undefined,
     counterparty:    stmt.counterName || undefined,
+    tag,
     transactionDate: stmt.time * 1000,
     importedAt:      now,
     rawPayload:      JSON.stringify(stmt),
   };
 }
 
-export async function fullMonoSync(
-  token:     string,
-  daysBack:  number,
-  onProgress: (p: SyncProgress) => void,
-): Promise<{
-  accounts: Array<{ raw: MonoAccount; account: Omit<Account, 'id' | 'createdAt'>; internalId?: string }>;
-  transactions: UnifiedTransaction[];
-}> {
-  onProgress({ step: 'Отримуємо рахунки…', current: 0, total: 1 });
-
-  const { accounts } = await fetchMonoClientInfo(token);
-
-  const nowSec   = Math.floor(Date.now() / 1000);
-  const fromSec  = nowSec - daysBack * 24 * 60 * 60;
-
-  // Split into 31-day windows (Mono max range)
-  const MAX_WINDOW = 30 * 24 * 60 * 60;
-  const windows: Array<{ from: number; to: number }> = [];
-  for (let t = fromSec; t < nowSec; t += MAX_WINDOW) {
-    windows.push({ from: t, to: Math.min(t + MAX_WINDOW, nowSec) });
-  }
-
-  const totalRequests = accounts.length * windows.length;
-  let   done          = 0;
-  const allTxs: UnifiedTransaction[] = [];
-
-  for (const { raw, account } of accounts) {
-    for (const win of windows) {
-      done++;
-      onProgress({
-        step:    `${account.name} · ${new Date(win.from * 1000).toLocaleDateString('uk-UA')}`,
-        current: done,
-        total:   totalRequests,
-      });
-
-      try {
-        const stmts = await fetchMonoStatement(token, raw.id, win.from, win.to);
-        // We don't know internalId yet; caller resolves after upsert
-        const txs = stmts.map((s) => monoStatementToTx(s, raw.id));
-        allTxs.push(...txs);
-      } catch (e: unknown) {
-        if ((e as Error)?.message === 'rate_limit') {
-          // Wait 65 seconds then retry
-          onProgress({ step: 'Ліміт API — чекаємо 65 с…', current: done, total: totalRequests });
-          await new Promise((r) => setTimeout(r, 65_000));
-          done--;
-          // Retry this window
-          continue;
-        }
-        console.warn('[mono] statement error:', e);
-      }
-
-      // Respect rate limit — 1 req / 60 s between statement calls
-      if (done < totalRequests) {
-        await new Promise((r) => setTimeout(r, 62_000));
-      }
-    }
-  }
-
-  onProgress({ step: 'Готово!', current: totalRequests, total: totalRequests });
-  return { accounts, transactions: allTxs };
-}

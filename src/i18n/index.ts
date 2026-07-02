@@ -146,6 +146,55 @@ export interface Translations {
   plannerAddIncome: string;
   plannerAddExpense: string;
   plannerPaid: string;
+  plannerEditTitle: string;
+  plannerAccount: string;
+
+  tagLabel: string;
+  tagNoTag: string;
+  tagEdit: string;
+  tagSearch: string;
+  tagEntertainment: string;
+  tagUtilities: string;
+  tagElectronics: string;
+  tagSelfTransfer: string;
+  tagTransfer: string;
+  tagTopUp: string;
+
+  txDetail: string;
+  txAccount: string;
+  txExactDate: string;
+  txMcc: string;
+
+  settingsReAutoTag: string;
+  settingsReAutoTagHint: string;
+  settingsMonobankLimit: string;
+  settingsMonobankLimitHint: string;
+  settingsZen: string;
+  settingsZenHint: string;
+  settingsZenInstructions: string;
+  settingsPrivatbank: string;
+  settingsPrivatbankHint: string;
+  settingsPrivatbankInstructions: string;
+
+  // CSV import
+  importCsvBtn: string;
+  importCsvLoading: string;
+  importCsvSuccess: string;
+  importCsvSkipped: string;
+  importCsvError: string;
+  importCsvCancel: string;
+  importCsvSectionTitle: string;
+  importCsvSelectAccount: string;
+  importCsvNoAccounts: string;
+
+  // Reset
+  settingsResetData: string;
+  settingsResetDataHint: string;
+  settingsResetDataConfirm: string;
+  settingsResetSettings: string;
+  settingsResetSettingsHint: string;
+  settingsResetSettingsConfirm: string;
+  settingsDanger: string;
 }
 
 const uk: Translations = {
@@ -231,8 +280,8 @@ const uk: Translations = {
   settingsSyncing: 'Синхронізація…',
   settingsApiRateLimit: 'Запит {current} з {total} · Ліміт API: ~62 с між запитами',
   settingsMonobankInstructions: '1. Відкрий додаток Monobank на телефоні\n2. Натисни на іконку ⚙️ (шестерня) у правому верхньому куті\n3. Прокрути вниз і знайди розділ "Для розробників"\n   — або відкрий сайт: https://api.monobank.ua у браузері\n4. Натисни кнопку "Підтвердити доступ" та підтверди у додатку\n5. Скопіюй токен та вставте у поле нижче\n\n📋 Приклад того, як виглядає токен:\nuAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(буква «u» на початку, потім 44 символи — латинські літери та цифри)\n\n⚠️ Токен діє 30 днів без використання. Якщо не синхронізувати — потрібно отримати новий.',
-  settingsIbkrTokenInstructions: '1. Відкрий браузер і перейди на сайт: https://www.interactivebrokers.com\n2. Натисни "Увійти" та зайди у Client Portal\n3. У верхньому меню знайди: Reports → Flex Queries\n4. На сторінці Flex Queries клікни "Manage Flex Tokens" (вгорі праворуч)\n5. Натисни "+ Створити токен" і скопіюй його\n6. Вставте токен у поле нижче\n\n📋 Приклад того, як виглядає IBKR Flex Token:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(38 символів: латинські літери та цифри, без пробілів)',
-  settingsIbkrQueryInstructions: '1. У Client Portal перейди: Reports → Flex Queries\n2. Знайди існуючий Flex Query або створи новий:\n   — Натисни "+ Create" → вибери потрібні параметри → збережи\n3. Поруч із назвою Query ти побачиш числовий ID\n4. Скопіюй цей ID та вставте у поле нижче\n\n📋 Приклад того, як виглядає Query ID:\n000000\n(6–7 цифр, лише числа)',
+  settingsIbkrTokenInstructions: '── ЯК ОТРИМАТИ FLEX TOKEN ──\n\n1. Відкрий браузер та зайди: https://portal.interactivebrokers.com\n2. Увійди у свій IBKR акаунт (Client Portal)\n3. У меню зліва або вгорі натисни: Performance & Reports\n4. Обери: Flex Queries\n5. На сторінці Flex Queries знайди посилання "Manage Flex Tokens" (праворуч вгорі або у вкладці)\n6. Натисни "+ Create Token"\n7. Скопіюй створений токен та вставте нижче\n\n📋 Як виглядає Flex Token:\nAbCdEfGhIj1234567890AbCdEfGhIj12345678\n(38 символів: латинські літери та цифри, без пробілів)\n\n⚠️ Токен відображається лише один раз! Зберігай одразу.',
+  settingsIbkrQueryInstructions: '── ЯК СТВОРИТИ FLEX QUERY ──\n\nFlex Query — це звіт, який IBKR генерує за твоїм запитом.\n\n1. Зайди у Client Portal: https://portal.interactivebrokers.com\n2. Перейди: Performance & Reports → Flex Queries\n3. Натисни "+ Create" → обери тип "Activity Flex Query"\n4. Введи назву (наприклад "Finance Export")\n5. У секції "Sections" постав галочки:\n   ✅ Cash Transactions\n   ✅ Trades (якщо потрібна торгова активність)\n6. Delivery Configuration:\n   • Format: XML\n   • Period: Last Business Day (або "Custom Date Range")\n7. General Configuration:\n   • Date Format: yyyyMMdd\n   • Time Format: HHmmss\n8. Натисни "Continue" → "Create"\n9. Після збереження ти побачиш числовий ID поряд із назвою Query\n10. Скопіюй цей ID та вставте нижче\n\n📋 Як виглядає Query ID:\n1234567\n(6–8 цифр, лише числа)',
   settingsSaltEdgeInstructions: '1. Відкрий https://www.saltedge.com у браузері\n2. Зареєструйся або увійди у свій акаунт\n3. Перейди: My Applications → натисни "+ Create Application"\n4. Заповни форму та збережи додаток\n5. Скопіюй "App ID" (не Secret!) та вставте у поле нижче\n\n📋 Приклад того, як виглядає Salt Edge App ID:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(довгий рядок з латинських літер та цифр)',
   settingsHowToGet: 'Як отримати?',
 
@@ -288,6 +337,53 @@ const uk: Translations = {
   plannerAddIncome: 'Додати надходження',
   plannerAddExpense: 'Додати витрату',
   plannerPaid: 'Оплачено',
+  plannerEditTitle: 'Редагувати запис',
+  plannerAccount: 'Рахунок',
+
+  tagLabel: 'Тег',
+  tagNoTag: 'Без тегу',
+  tagEdit: 'Змінити тег',
+  tagSearch: 'Пошук за тегом',
+  tagEntertainment: 'Розваги',
+  tagUtilities: 'Побут',
+  tagElectronics: 'Електротехніка',
+  tagSelfTransfer: 'Перекази між своїми рахунками',
+  tagTransfer: 'Перекази',
+  tagTopUp: 'Поповнення',
+
+  txDetail: 'Деталі транзакції',
+  txAccount: 'Рахунок',
+  txExactDate: 'Дата та час',
+  txMcc: 'MCC код',
+
+  settingsReAutoTag: 'Автовизначення тегів',
+  settingsReAutoTagHint: 'Встановлює теги для транзакцій без тегу на основі MCC та опису',
+  settingsMonobankLimit: 'Обмеження API Monobank',
+  settingsMonobankLimitHint: 'Monobank дозволяє завантажити лише 90 днів виписки. Більш старі дані недоступні через API. Точка відліку — дата першого підключення.',
+  settingsZen: 'ZEN Money (CSV)',
+  settingsZenHint: 'Інтеграція через файл виписки (CSV/OFX з додатку ZEN)',
+  settingsZenInstructions: '1. Відкрийте додаток ZEN Money\n2. Перейдіть до: Профіль → Виписки / Експорт\n3. Оберіть формат CSV та завантажте файл\n4. Натисніть кнопку "Імпортувати CSV" нижче та оберіть файл\n\n⚠️ ZEN Money не має відкритого API для особистих рахунків. Використовується імпорт CSV-файлу.',
+  settingsPrivatbank: 'PrivatBank (CSV)',
+  settingsPrivatbankHint: 'Інтеграція через виписку з ПриватБанку',
+  settingsPrivatbankInstructions: '1. Зайдіть у Приват24 (app або web.privatbank.ua)\n2. Виписка → Завантажити виписку → Формат CSV або XLS\n3. Натисніть "Імпортувати" нижче та оберіть файл\n\n⚠️ API ПриватБанку для фізичних осіб потребує корпоративного підключення. Тому використовується ручний імпорт файлу.',
+
+  importCsvBtn: 'Імпортувати файл',
+  importCsvLoading: 'Читаємо файл…',
+  importCsvSuccess: 'Додано {count} транзакцій',
+  importCsvSkipped: 'Пропущено {count} дублікатів',
+  importCsvError: 'Помилка читання файлу',
+  importCsvCancel: 'Скасовано',
+  importCsvSectionTitle: 'Імпорт виписок (CSV)',
+  importCsvSelectAccount: 'Прив\'язати до картки',
+  importCsvNoAccounts: 'Спочатку додайте рахунок у розділі «Картки»',
+
+  settingsResetData: 'Скидання даних',
+  settingsResetDataHint: 'Видаляє всі транзакції та аналітику',
+  settingsResetDataConfirm: 'Ви впевнені? Всі транзакції будуть видалені без можливості відновлення.',
+  settingsResetSettings: 'Скидання налаштувань',
+  settingsResetSettingsHint: 'Повертає всі налаштування до заводських',
+  settingsResetSettingsConfirm: 'Це видалить мову, тему, валюти та API-ключі. Продовжити?',
+  settingsDanger: 'Небезпечна зона',
 };
 
 const en: Translations = {
@@ -373,8 +469,8 @@ const en: Translations = {
   settingsSyncing: 'Syncing…',
   settingsApiRateLimit: 'Request {current} of {total} · API limit: ~62s between requests',
   settingsMonobankInstructions: '1. Open the Monobank app on your phone\n2. Tap the ⚙️ (gear) icon in the top right corner\n3. Scroll down and find "For Developers"\n   — or open https://api.monobank.ua in a browser\n4. Tap "Confirm access" and confirm in the app\n5. Copy the token and paste it in the field below\n\n📋 Example of what the token looks like:\nuAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(letter «u» at the start, then 44 characters — letters and digits)\n\n⚠️ Token expires after 30 days without use. If inactive, generate a new one.',
-  settingsIbkrTokenInstructions: '1. Open your browser and go to: https://www.interactivebrokers.com\n2. Click "Log In" and enter the Client Portal\n3. In the top menu find: Reports → Flex Queries\n4. On the Flex Queries page click "Manage Flex Tokens" (top right)\n5. Click "+ Create Token" and copy it\n6. Paste the token in the field below\n\n📋 Example of what an IBKR Flex Token looks like:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(38 characters: Latin letters and digits, no spaces)',
-  settingsIbkrQueryInstructions: '1. In Client Portal go to: Reports → Flex Queries\n2. Find an existing Flex Query or create a new one:\n   — Click "+ Create" → configure parameters → save\n3. Next to the Query name you will see a numeric ID\n4. Copy that ID and paste it in the field below\n\n📋 Example of what a Query ID looks like:\n000000\n(6–7 digits, numbers only)',
+  settingsIbkrTokenInstructions: '── HOW TO GET FLEX TOKEN ──\n\n1. Open: https://portal.interactivebrokers.com\n2. Log in to your IBKR account (Client Portal)\n3. In the left/top menu: Performance & Reports\n4. Choose: Flex Queries\n5. On the Flex Queries page find "Manage Flex Tokens" (top right)\n6. Click "+ Create Token"\n7. Copy the generated token and paste it below\n\n📋 Example Flex Token:\nAbCdEfGhIj1234567890AbCdEfGhIj12345678\n(38 chars: letters and digits, no spaces)\n\n⚠️ Token is shown only once! Copy immediately.',
+  settingsIbkrQueryInstructions: '── HOW TO CREATE A FLEX QUERY ──\n\nA Flex Query is a custom report IBKR generates on demand.\n\n1. Go to Client Portal: https://portal.interactivebrokers.com\n2. Navigate: Performance & Reports → Flex Queries\n3. Click "+ Create" → choose "Activity Flex Query"\n4. Enter a name (e.g. "Finance Export")\n5. In "Sections" check:\n   ✅ Cash Transactions\n   ✅ Trades (if trading activity needed)\n6. Delivery Configuration:\n   • Format: XML\n   • Period: Last Business Day (or Custom Date Range)\n7. General Configuration:\n   • Date Format: yyyyMMdd\n   • Time Format: HHmmss\n8. Click "Continue" → "Create"\n9. After saving, the numeric ID appears next to the query name\n10. Copy the ID and paste it below\n\n📋 Example Query ID:\n1234567\n(6–8 digits, numbers only)',
   settingsSaltEdgeInstructions: '1. Open https://www.saltedge.com in a browser\n2. Register or log in to your account\n3. Go to: My Applications → click "+ Create Application"\n4. Fill in the form and save the application\n5. Copy the "App ID" (not Secret!) and paste it below\n\n📋 Example of what a Salt Edge App ID looks like:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n(long string of Latin letters and digits)',
   settingsHowToGet: 'How to get?',
 
@@ -430,6 +526,53 @@ const en: Translations = {
   plannerAddIncome: 'Add income',
   plannerAddExpense: 'Add expense',
   plannerPaid: 'Paid',
+  plannerEditTitle: 'Edit entry',
+  plannerAccount: 'Account',
+
+  tagLabel: 'Tag',
+  tagNoTag: 'No tag',
+  tagEdit: 'Edit tag',
+  tagSearch: 'Search by tag',
+  tagEntertainment: 'Entertainment',
+  tagUtilities: 'Utilities',
+  tagElectronics: 'Electronics',
+  tagSelfTransfer: 'Self Transfers',
+  tagTransfer: 'Transfers',
+  tagTopUp: 'Top Up',
+
+  txDetail: 'Transaction Details',
+  txAccount: 'Account',
+  txExactDate: 'Date & Time',
+  txMcc: 'MCC code',
+
+  settingsReAutoTag: 'Auto-detect Tags',
+  settingsReAutoTagHint: 'Sets tags for untagged transactions based on MCC and description',
+  settingsMonobankLimit: 'Monobank API Limit',
+  settingsMonobankLimitHint: 'Monobank only allows loading the last 90 days of statements. Older data is unavailable via API. The cutoff date is 90 days before the first sync.',
+  settingsZen: 'ZEN Money (CSV)',
+  settingsZenHint: 'Integration via exported statement file (CSV/OFX from ZEN app)',
+  settingsZenInstructions: '1. Open the ZEN Money app\n2. Go to: Profile → Statements / Export\n3. Choose CSV format and download the file\n4. Tap "Import CSV" below and select the file\n\n⚠️ ZEN Money has no open personal banking API. CSV file import is used instead.',
+  settingsPrivatbank: 'PrivatBank (CSV)',
+  settingsPrivatbankHint: 'Integration via PrivatBank statement export',
+  settingsPrivatbankInstructions: '1. Log in to Privat24 (app or web.privatbank.ua)\n2. Statements → Download → CSV or XLS format\n3. Tap "Import" below and select the file\n\n⚠️ PrivatBank personal API requires a corporate connection. Manual file import is used instead.',
+
+  importCsvBtn: 'Import file',
+  importCsvLoading: 'Reading file…',
+  importCsvSuccess: 'Added {count} transactions',
+  importCsvSkipped: 'Skipped {count} duplicates',
+  importCsvError: 'File read error',
+  importCsvCancel: 'Cancelled',
+  importCsvSectionTitle: 'Statement import (CSV)',
+  importCsvSelectAccount: 'Link to card',
+  importCsvNoAccounts: 'Add an account in Cards section first',
+
+  settingsResetData: 'Reset Data',
+  settingsResetDataHint: 'Deletes all transactions and analytics',
+  settingsResetDataConfirm: 'Are you sure? All transactions will be permanently deleted.',
+  settingsResetSettings: 'Reset Settings',
+  settingsResetSettingsHint: 'Restores all settings to factory defaults',
+  settingsResetSettingsConfirm: 'This will delete your language, theme, currencies and API keys. Continue?',
+  settingsDanger: 'Danger Zone',
 };
 
 export const TRANSLATIONS: Record<Language, Translations> = { uk, en };

@@ -30,16 +30,17 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
-      "expo-sqlite",
       "expo-secure-store",
       "expo-local-authentication",
+      "expo-document-picker",
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
           "color": "#3b82f6"
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

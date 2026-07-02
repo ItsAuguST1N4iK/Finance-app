@@ -75,6 +75,7 @@ export interface UnifiedTransaction {
 
   description?: string;
   category?: string;   // 'salary' | 'food' | 'dividend' | ...
+  tag?: string;        // auto or manually assigned tag
   mcc?: number;        // MCC-код картки (Monobank/PrivatBank)
   counterparty?: string;
   directionFrom?: string;
@@ -166,6 +167,7 @@ export interface AnalyticsFilters {
   periodPreset?: 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'all' | 'custom';
   chartMode?: 'daily' | 'monthly';   // for year view: daily vs monthly buckets
   chartType?: 'income' | 'expense';  // which series to show in chart
+  excludeSelfTransfers?: boolean;    // exclude self-transfer tagged transactions
 }
 
 export interface ExchangeRate {

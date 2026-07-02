@@ -54,7 +54,7 @@ function CardEditModal({ account, visible, onClose, onSave }: CardEditModalProps
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
       >
       <View style={[ceStyles.overlay, { backgroundColor: theme.overlay }]}>
         <View style={[ceStyles.sheet, { backgroundColor: theme.card, borderColor: theme.border }]}>

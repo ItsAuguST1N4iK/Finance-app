@@ -11,20 +11,25 @@ interface TransactionsFilter {
   accountId?: string;
   searchText?: string;
   currency?: string;
+  tag?: string | '__none__';
+}
+
+export interface UpsertResult {
+  inserted: number;
+  skipped: number;
+  total: number;
 }
 
 interface TransactionsState {
   transactions: UnifiedTransaction[];
+  totalCount: number;
   isLoading: boolean;
   filter: TransactionsFilter;
 
-  /** Завантажити транзакції з SQLite з фільтрами */
   loadTransactions: (filter?: TransactionsFilter) => void;
-
-  /** Зберегти пакет транзакцій (після синхронізації з API) */
-  upsertTransactions: (txs: UnifiedTransaction[]) => void;
-
-  /** Оновити активний фільтр */
+  getTotalCount: () => number;
+  upsertTransactions: (txs: UnifiedTransaction[]) => UpsertResult;
+  updateTransactionTag: (id: string, tag: string | null) => void;
   setFilter: (filter: TransactionsFilter) => void;
 }
 
@@ -55,17 +60,28 @@ function buildSelectQuery(filter: TransactionsFilter): { sql: string; params: SQ
     params.push(filter.dateTo);
   }
   if (filter.searchText) {
-    conditions.push('(description LIKE ? OR counterparty LIKE ?)');
-    params.push(`%${filter.searchText}%`, `%${filter.searchText}%`);
+    conditions.push('(description LIKE ? OR counterparty LIKE ? OR tag LIKE ?)');
+    params.push(`%${filter.searchText}%`, `%${filter.searchText}%`, `%${filter.searchText}%`);
   }
   if (filter.currency) {
     conditions.push('currency = ?');
     params.push(filter.currency);
   }
+  if (filter.tag === '__none__') {
+    conditions.push('tag IS NULL');
+  } else if (filter.tag) {
+    conditions.push('tag = ?');
+    params.push(filter.tag);
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const sql = `SELECT * FROM transactions ${where} ORDER BY transaction_date DESC LIMIT 500`;
+  const sql = `SELECT * FROM transactions ${where} ORDER BY transaction_date DESC`;
   return { sql, params };
+}
+
+function buildCountQuery(filter: TransactionsFilter): { sql: string; params: SQLiteBindValue[] } {
+  const { sql, params } = buildSelectQuery(filter);
+  return { sql: sql.replace('SELECT *', 'SELECT COUNT(*) as cnt'), params };
 }
 
 function rowToTx(r: Record<string, unknown>): UnifiedTransaction {
@@ -84,6 +100,7 @@ function rowToTx(r: Record<string, unknown>): UnifiedTransaction {
     feeType:         (r.fee_type as string | null) ?? undefined,
     description:     (r.description as string | null) ?? undefined,
     category:        (r.category as string | null) ?? undefined,
+    tag:             (r.tag as string | null) ?? undefined,
     mcc:             (r.mcc as number | null) ?? undefined,
     counterparty:    (r.counterparty as string | null) ?? undefined,
     directionFrom:   (r.direction_from as string | null) ?? undefined,
@@ -94,8 +111,39 @@ function rowToTx(r: Record<string, unknown>): UnifiedTransaction {
   };
 }
 
+function isDuplicate(
+  db: ReturnType<typeof getDatabase>,
+  tx: UnifiedTransaction,
+): boolean {
+  if (tx.externalId) {
+    const byExternal = db.getFirstSync<{ id: string }>(
+      `SELECT id FROM transactions WHERE platform = ? AND external_id = ? LIMIT 1`,
+      [tx.platform, tx.externalId],
+    );
+    if (byExternal) return true;
+  }
+
+  const byFingerprint = db.getFirstSync<{ id: string }>(
+    `SELECT id FROM transactions
+     WHERE account_id = ? AND platform = ?
+       AND transaction_date BETWEEN ? AND ?
+       AND amount = ? AND currency = ?
+       AND COALESCE(description, '') = COALESCE(?, '')
+     LIMIT 1`,
+    [
+      tx.accountId, tx.platform,
+      tx.transactionDate - 60_000, tx.transactionDate + 60_000,
+      tx.amount, tx.currency, tx.description ?? null,
+    ],
+  );
+  if (byFingerprint) return true;
+
+  return false;
+}
+
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
+  totalCount: 0,
   isLoading: false,
   filter: {},
 
@@ -107,44 +155,82 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       const db = getDatabase();
       const { sql, params } = buildSelectQuery(activeFilter);
       const rows = db.getAllSync<Record<string, unknown>>(sql, params);
-      set({ transactions: rows.map(rowToTx), isLoading: false });
+      const { sql: countSql, params: countParams } = buildCountQuery(activeFilter);
+      const countRow = db.getFirstSync<{ cnt: number }>(countSql, countParams);
+      set({
+        transactions: rows.map(rowToTx),
+        totalCount: countRow?.cnt ?? rows.length,
+        isLoading: false,
+      });
     } catch (e) {
       console.error('[transactionsSlice] loadTransactions error:', e);
       set({ isLoading: false });
     }
   },
 
+  getTotalCount: () => {
+    try {
+      const db = getDatabase();
+      const row = db.getFirstSync<{ cnt: number }>('SELECT COUNT(*) as cnt FROM transactions');
+      return row?.cnt ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+
   upsertTransactions: (txs) => {
     const db = getDatabase();
+    let inserted = 0;
+    let skipped = 0;
 
-    // INSERT OR IGNORE — якщо (platform, external_id) вже є — пропускаємо
-    const stmt = db.prepareSync(
+    const insertStmt = db.prepareSync(
       `INSERT OR IGNORE INTO transactions
        (id, account_id, platform, external_id, type, amount, currency,
         amount_base, exchange_rate, fee_amount, fee_currency, fee_type,
-        description, category, mcc, counterparty, direction_from, direction_to,
+        description, category, tag, mcc, counterparty, direction_from, direction_to,
         transaction_date, imported_at, raw_payload)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
 
-    db.withTransactionSync(() => {
-      for (const tx of txs) {
-        stmt.executeSync([
-          tx.id, tx.accountId, tx.platform, tx.externalId ?? null,
-          tx.type, tx.amount, tx.currency,
-          tx.amountBase ?? null, tx.exchangeRate ?? null,
-          tx.feeAmount, tx.feeCurrency ?? null, tx.feeType ?? null,
-          tx.description ?? null, tx.category ?? null, tx.mcc ?? null,
-          tx.counterparty ?? null, tx.directionFrom ?? null, tx.directionTo ?? null,
-          tx.transactionDate, tx.importedAt, tx.rawPayload ?? null,
-        ]);
-      }
-    });
+    try {
+      db.withTransactionSync(() => {
+        for (const tx of txs) {
+          if (isDuplicate(db, tx)) {
+            skipped++;
+            continue;
+          }
+          insertStmt.executeSync([
+            tx.id, tx.accountId, tx.platform, tx.externalId ?? null,
+            tx.type, tx.amount, tx.currency,
+            tx.amountBase ?? null, tx.exchangeRate ?? null,
+            tx.feeAmount, tx.feeCurrency ?? null, tx.feeType ?? null,
+            tx.description ?? null, tx.category ?? null, tx.tag ?? null, tx.mcc ?? null,
+            tx.counterparty ?? null, tx.directionFrom ?? null, tx.directionTo ?? null,
+            tx.transactionDate, tx.importedAt, tx.rawPayload ?? null,
+          ]);
+          inserted++;
+        }
+      });
+    } finally {
+      insertStmt.finalizeSync();
+    }
 
-    stmt.finalizeSync();
-
-    // Перезавантажити список з тим самим фільтром
     get().loadTransactions();
+    return { inserted, skipped, total: txs.length };
+  },
+
+  updateTransactionTag: (id, tag) => {
+    try {
+      const db = getDatabase();
+      db.runSync('UPDATE transactions SET tag = ? WHERE id = ?', [tag, id]);
+      set((state) => ({
+        transactions: state.transactions.map((tx) =>
+          tx.id === id ? { ...tx, tag: tag ?? undefined } : tx
+        ),
+      }));
+    } catch (e) {
+      console.error('[transactionsSlice] updateTransactionTag error:', e);
+    }
   },
 
   setFilter: (filter) => {
