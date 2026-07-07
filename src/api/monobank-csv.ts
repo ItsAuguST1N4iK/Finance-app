@@ -7,8 +7,19 @@
 import Papa from 'papaparse';
 import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
+import { parseAmount } from '../utils/parseAmount';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
 import { autoDetectTag } from '../utils/tags';
+import { autoDetectCategory } from '../utils/categories';
+
+export type MonoCsvCurrencyMode = 'account' | 'operation';
+
+export interface MonoCsvImportOptions {
+  /** Which amount/currency columns to use from the CSV */
+  currencyMode: MonoCsvCurrencyMode;
+  /** Currency of the linked account (e.g. EUR, UAH) */
+  accountCurrency: string;
+}
 
 function parseMonoDate(s: string): number {
   const [datePart, timePart] = s.trim().split(' ');
@@ -27,6 +38,7 @@ export function parseMonobankCsv(
   internalAccountId: string,
   ownIbans: string[] = [],
   ownAccounts?: Account[],
+  options: MonoCsvImportOptions = { currencyMode: 'account', accountCurrency: 'UAH' },
 ): MonoCsvImportResult {
   const result = Papa.parse<string[]>(csvContent.trim(), {
     skipEmptyLines: true,
@@ -41,6 +53,7 @@ export function parseMonobankCsv(
 
   const dataRows = rows.slice(1);
   const transactions: UnifiedTransaction[] = [];
+  const accountCurrency = options.accountCurrency || 'UAH';
 
   for (const row of dataRows) {
     if (row.length < 4) continue;
@@ -51,23 +64,29 @@ export function parseMonobankCsv(
       exchangeRateStr, commissionStr,
     ] = row;
 
-    const cardAmount = parseFloat(cardAmountStr ?? '0');
-    const opAmount   = parseFloat(opAmountStr   ?? '0');
+    const cardAmount = parseAmount(cardAmountStr);
+    const opAmount   = parseAmount(opAmountStr);
     const mcc        = parseInt(mccStr ?? '0', 10) || undefined;
-    const commission = Math.abs(parseFloat(commissionStr ?? '0') || 0);
+    const commission = Math.abs(parseAmount(commissionStr));
 
-    if (isNaN(cardAmount)) continue;
+    if (cardAmount === 0 && opAmount === 0) continue;
 
     const date = parseMonoDate(dateStr ?? '');
     const desc = description?.trim();
 
-    const currency = (opCurrency?.trim() && opCurrency.trim() !== '—')
-      ? opCurrency.trim()
-      : 'UAH';
+    const opCurRaw = opCurrency?.trim();
+    const hasOpCurrency = !!(opCurRaw && opCurRaw !== '—' && opCurRaw !== '-');
 
-    const amount = (opCurrency?.trim() && opCurrency.trim() !== '—' && opCurrency.trim() !== 'UAH')
-      ? Math.abs(opAmount)
-      : Math.abs(cardAmount);
+    let amount: number;
+    let currency: string;
+
+    if (options.currencyMode === 'operation' && hasOpCurrency) {
+      amount = Math.abs(opAmount || cardAmount);
+      currency = opCurRaw!;
+    } else {
+      amount = Math.abs(cardAmount || opAmount);
+      currency = accountCurrency;
+    }
 
     const isCancellation = /^Cancellation\./i.test(desc ?? '');
     const baseType: UnifiedTransaction['type'] = cardAmount > 0 ? 'income' : 'expense';
@@ -78,6 +97,7 @@ export function parseMonobankCsv(
     const tag = self
       ? 'self_transfer'
       : autoDetectTag(mcc, desc, ownIbans, undefined, ownAccounts);
+    const category = autoDetectCategory(mcc, desc, tag, undefined, ownIbans);
 
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'monobank', date, amount, currency, desc,
@@ -95,10 +115,12 @@ export function parseMonobankCsv(
       description:     desc || undefined,
       mcc,
       tag:             tag ?? undefined,
+      category,
       transactionDate: date,
       importedAt:      Date.now(),
       rawPayload:      JSON.stringify({
-        cardAmount, opAmount, currency, exchangeRate: exchangeRateStr,
+        cardAmount, opAmount, opCurrency: opCurRaw, accountCurrency, exchangeRate: exchangeRateStr,
+        currencyMode: options.currencyMode,
       }),
     });
   }

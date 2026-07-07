@@ -16,20 +16,21 @@ interface TransactionsFilter {
 
 export interface UpsertResult {
   inserted: number;
-  skipped: number;
   total: number;
 }
 
 interface TransactionsState {
   transactions: UnifiedTransaction[];
+  recentTransactions: UnifiedTransaction[];
   totalCount: number;
   isLoading: boolean;
   filter: TransactionsFilter;
 
   loadTransactions: (filter?: TransactionsFilter) => void;
+  loadRecentTransactions: () => void;
   getTotalCount: () => number;
   upsertTransactions: (txs: UnifiedTransaction[]) => UpsertResult;
-  updateTransactionTag: (id: string, tag: string | null) => void;
+  updateTransactionTag: (id: string, tag: string | null, category?: string | null) => void;
   setFilter: (filter: TransactionsFilter) => void;
 }
 
@@ -111,41 +112,24 @@ function rowToTx(r: Record<string, unknown>): UnifiedTransaction {
   };
 }
 
-function isDuplicate(
-  db: ReturnType<typeof getDatabase>,
-  tx: UnifiedTransaction,
-): boolean {
-  if (tx.externalId) {
-    const byExternal = db.getFirstSync<{ id: string }>(
-      `SELECT id FROM transactions WHERE platform = ? AND external_id = ? LIMIT 1`,
-      [tx.platform, tx.externalId],
-    );
-    if (byExternal) return true;
-  }
-
-  const byFingerprint = db.getFirstSync<{ id: string }>(
-    `SELECT id FROM transactions
-     WHERE account_id = ? AND platform = ?
-       AND transaction_date BETWEEN ? AND ?
-       AND amount = ? AND currency = ?
-       AND COALESCE(description, '') = COALESCE(?, '')
-     LIMIT 1`,
-    [
-      tx.accountId, tx.platform,
-      tx.transactionDate - 60_000, tx.transactionDate + 60_000,
-      tx.amount, tx.currency, tx.description ?? null,
-    ],
-  );
-  if (byFingerprint) return true;
-
-  return false;
-}
-
 export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
+  recentTransactions: [],
   totalCount: 0,
   isLoading: false,
   filter: {},
+
+  loadRecentTransactions: () => {
+    try {
+      const db = getDatabase();
+      const rows = db.getAllSync<Record<string, unknown>>(
+        'SELECT * FROM transactions ORDER BY transaction_date DESC LIMIT 10',
+      );
+      set({ recentTransactions: rows.map(rowToTx) });
+    } catch (e) {
+      console.error('[transactionsSlice] loadRecentTransactions error:', e);
+    }
+  },
 
   loadTransactions: (filter) => {
     const activeFilter = filter ?? get().filter;
@@ -181,10 +165,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   upsertTransactions: (txs) => {
     const db = getDatabase();
     let inserted = 0;
-    let skipped = 0;
 
     const insertStmt = db.prepareSync(
-      `INSERT OR IGNORE INTO transactions
+      `INSERT INTO transactions
        (id, account_id, platform, external_id, type, amount, currency,
         amount_base, exchange_rate, fee_amount, fee_currency, fee_type,
         description, category, tag, mcc, counterparty, direction_from, direction_to,
@@ -195,20 +178,20 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     try {
       db.withTransactionSync(() => {
         for (const tx of txs) {
-          if (isDuplicate(db, tx)) {
-            skipped++;
-            continue;
+          try {
+            insertStmt.executeSync([
+              tx.id, tx.accountId, tx.platform, tx.externalId ?? null,
+              tx.type, tx.amount, tx.currency,
+              tx.amountBase ?? null, tx.exchangeRate ?? null,
+              tx.feeAmount, tx.feeCurrency ?? null, tx.feeType ?? null,
+              tx.description ?? null, tx.category ?? null, tx.tag ?? null, tx.mcc ?? null,
+              tx.counterparty ?? null, tx.directionFrom ?? null, tx.directionTo ?? null,
+              tx.transactionDate, tx.importedAt, tx.rawPayload ?? null,
+            ]);
+            inserted++;
+          } catch (e) {
+            console.warn('[transactionsSlice] skip insert:', tx.id, e);
           }
-          insertStmt.executeSync([
-            tx.id, tx.accountId, tx.platform, tx.externalId ?? null,
-            tx.type, tx.amount, tx.currency,
-            tx.amountBase ?? null, tx.exchangeRate ?? null,
-            tx.feeAmount, tx.feeCurrency ?? null, tx.feeType ?? null,
-            tx.description ?? null, tx.category ?? null, tx.tag ?? null, tx.mcc ?? null,
-            tx.counterparty ?? null, tx.directionFrom ?? null, tx.directionTo ?? null,
-            tx.transactionDate, tx.importedAt, tx.rawPayload ?? null,
-          ]);
-          inserted++;
         }
       });
     } finally {
@@ -216,17 +199,25 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     }
 
     get().loadTransactions();
-    return { inserted, skipped, total: txs.length };
+    get().loadRecentTransactions();
+    return { inserted, total: txs.length };
   },
 
-  updateTransactionTag: (id, tag) => {
+  updateTransactionTag: (id, tag, category) => {
     try {
       const db = getDatabase();
-      db.runSync('UPDATE transactions SET tag = ? WHERE id = ?', [tag, id]);
+      if (category !== undefined) {
+        db.runSync('UPDATE transactions SET tag = ?, category = ? WHERE id = ?', [tag, category, id]);
+      } else {
+        db.runSync('UPDATE transactions SET tag = ? WHERE id = ?', [tag, id]);
+      }
+      const patch = (tx: UnifiedTransaction) =>
+        tx.id === id
+          ? { ...tx, tag: tag ?? undefined, ...(category !== undefined ? { category: category ?? undefined } : {}) }
+          : tx;
       set((state) => ({
-        transactions: state.transactions.map((tx) =>
-          tx.id === id ? { ...tx, tag: tag ?? undefined } : tx
-        ),
+        transactions: state.transactions.map(patch),
+        recentTransactions: state.recentTransactions.map(patch),
       }));
     } catch (e) {
       console.error('[transactionsSlice] updateTransactionTag error:', e);

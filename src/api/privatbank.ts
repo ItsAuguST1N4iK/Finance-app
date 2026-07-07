@@ -25,6 +25,7 @@ import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
 import { autoDetectTag } from '../utils/tags';
+import { autoDetectCategory } from '../utils/categories';
 import * as XLSX from 'xlsx';
 
 function parsePrivatDate(s: string): number {
@@ -75,6 +76,7 @@ export function parsePrivatbankXlsx(
     if (!row[0]) continue;
 
     const dateStr    = String(row[0] ?? '').trim();
+    const bankCat    = String(row[1] ?? '').trim();
     const desc       = String(row[3] ?? '').trim();
     const amountStr  = String(row[4] ?? '0');
     const cardCur    = String(row[5] ?? 'UAH').trim();
@@ -95,6 +97,7 @@ export function parsePrivatbankXlsx(
     const tag = self
       ? 'self_transfer'
       : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
+    const category = autoDetectCategory(undefined, desc, tag, bankCat || undefined, ownIbans);
 
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'privatbank', date, amount, currency, desc,
@@ -111,9 +114,10 @@ export function parsePrivatbankXlsx(
       feeAmount:       0,
       description:     desc || undefined,
       tag:             tag ?? undefined,
+      category,
       transactionDate: date,
       importedAt:      Date.now(),
-      rawPayload:      JSON.stringify({ dateStr, desc, cardAmount, currency }),
+      rawPayload:      JSON.stringify({ dateStr, bankCat, desc, cardAmount, currency }),
     });
   }
 
@@ -152,6 +156,7 @@ export function parsePrivatbankCsv(
     if (cols.length < 5) continue;
 
     const dateStr   = cols[0]?.trim() ?? '';
+    const bankCat   = cols[1]?.trim() ?? '';
     const desc      = cols[3]?.trim() ?? '';
     const amountStr = cols[4]?.trim() ?? '0';
     const cardCur   = cols[5]?.trim() ?? 'UAH';
@@ -170,6 +175,7 @@ export function parsePrivatbankCsv(
     const tag = self
       ? 'self_transfer'
       : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
+    const category = autoDetectCategory(undefined, desc, tag, bankCat || undefined, ownIbans);
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'privatbank', date, amount, currency, desc,
     );
@@ -185,9 +191,10 @@ export function parsePrivatbankCsv(
       feeAmount:       0,
       description:     desc || undefined,
       tag:             tag ?? undefined,
+      category,
       transactionDate: date,
       importedAt:      Date.now(),
-      rawPayload:      JSON.stringify({ dateStr, desc, cardAmount, currency }),
+      rawPayload:      JSON.stringify({ dateStr, bankCat, desc, cardAmount, currency }),
     });
   }
 

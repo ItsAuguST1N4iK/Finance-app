@@ -15,6 +15,7 @@
 
 import type { Account, UnifiedTransaction } from '../types';
 import { autoDetectTag } from '../utils/tags';
+import { autoDetectCategory } from '../utils/categories';
 
 const BASE = 'https://api.monobank.ua';
 
@@ -156,6 +157,13 @@ export function monoStatementToTx(
     stmt.counterIban,
     ownAccounts,
   );
+  const category = autoDetectCategory(
+    stmt.mcc || undefined,
+    stmt.description || stmt.comment || undefined,
+    tag,
+    undefined,
+    ownIbans,
+  );
 
   return {
     id:              `mono_${stmt.id}`,
@@ -170,6 +178,7 @@ export function monoStatementToTx(
     mcc:             stmt.mcc || undefined,
     counterparty:    stmt.counterName || undefined,
     tag,
+    category,
     transactionDate: stmt.time * 1000,
     importedAt:      now,
     rawPayload:      JSON.stringify(stmt),

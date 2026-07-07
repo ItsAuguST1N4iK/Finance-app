@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Modal, TextInput, ScrollView, LayoutAnimation, Platform,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,11 +39,11 @@ function PlannerCard({
   const isExpense = item.planType === 'expense';
 
   const STATUS_LABELS: Record<PlannedIncomeStatus, string> = {
-    pending:         '⏳ Очікується',
-    matched:         isExpense ? '✅ Оплачено' : '✅ Отримано',
-    received_manual: isExpense ? '✅ Оплачено' : '✅ Підтверджено',
-    overdue:         '⚠️ Прострочено',
-    cancelled:       '✗ Скасовано',
+    pending:         t.plannerStatusPending,
+    matched:         isExpense ? t.plannerStatusPaid : t.plannerStatusReceived,
+    received_manual: isExpense ? t.plannerStatusPaid : t.plannerStatusConfirmed,
+    overdue:         t.plannerStatusOverdue,
+    cancelled:       t.plannerStatusCancelled,
   };
 
   const STATUS_COLORS: Record<PlannedIncomeStatus, string> = {
@@ -92,9 +92,11 @@ function PlannerCard({
           {format(item.expectedDate, 'd MMMM yyyy', { locale: uk })}
         </Text>
         {isPending && daysLeft > 0 && (
-          <Text style={[styles.cardDaysLeft, { color: theme.warning }]}>через {daysLeft} дн.</Text>
+          <Text style={[styles.cardDaysLeft, { color: theme.warning }]}>
+            {t.inDays.replace('{n}', String(daysLeft))}
+          </Text>
         )}
-        {isOverdue && <Text style={[styles.cardDaysLeft, { color: theme.expense }]}>прострочено</Text>}
+        {isOverdue && <Text style={[styles.cardDaysLeft, { color: theme.expense }]}>{t.plannerOverdueShort}</Text>}
       </View>
 
       {/* Account name */}
@@ -107,7 +109,7 @@ function PlannerCard({
 
       {item.source && (
         <Text style={[styles.cardSource, { color: theme.subtext }]}>
-          {isExpense ? 'Куди:' : 'Від:'} {item.source}
+          {isExpense ? t.plannerSourceTo : t.plannerSourceFrom} {item.source}
         </Text>
       )}
       {item.notes && <Text style={[styles.cardNotes, { color: theme.subtext }]}>{item.notes}</Text>}
@@ -118,7 +120,7 @@ function PlannerCard({
             <TouchableOpacity style={styles.btnConfirm} onPress={() => onConfirm(item.id)} activeOpacity={0.75}>
               <Ionicons name="checkmark-circle-outline" size={16} color={isExpense ? theme.expense : theme.income} />
               <Text style={[styles.btnText, { color: isExpense ? theme.expense : theme.income }]}>
-                {isExpense ? t.plannerPaid : 'Отримано'}
+                {isExpense ? t.plannerPaid : t.plannerReceived}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btnCancel} onPress={() => onCancel(item.id)} activeOpacity={0.75}>
@@ -204,17 +206,17 @@ function PlannerFormModal({
   }, [accounts]);
 
   const RECURRENCE_LABELS: Record<RecurrenceType, string> = {
-    once: 'Один раз', weekly: 'Щотижня', monthly: 'Щомісяця', custom: 'Кастомно',
+    once: t.plannerFreqOnce, weekly: t.plannerFreqWeekly, monthly: t.plannerFreqMonthly, custom: t.plannerFreqCustom,
   };
 
   function handleSave() {
     if (!name.trim() || !amount) {
-      show('Помилка', 'Заповніть назву та суму.');
+      show(t.error, t.plannerFillRequired);
       return;
     }
     const resolvedAccountId = accountId || accounts.find((a) => a.id === 'acc_default')?.id || accounts[0]?.id;
     if (!resolvedAccountId) {
-      show('Помилка', 'Не вдалося визначити рахунок.');
+      show(t.error, t.plannerAccountError);
       return;
     }
     const expectedDate = addDays(new Date(), parseInt(daysAhead, 10) || 7).setHours(9, 0, 0, 0);
@@ -295,7 +297,7 @@ function PlannerFormModal({
             <Text style={[styles.label, { color: theme.subtext }]}>Назва *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder="Зарплата, фріланс..."
+              placeholder={t.plannerNamePlaceholder}
               placeholderTextColor={theme.subtext}
               value={name}
               onChangeText={setName}
@@ -353,11 +355,11 @@ function PlannerFormModal({
             />
 
             <Text style={[styles.label, { color: theme.subtext }]}>
-              {isExpense ? 'Куди / на що' : 'Джерело'}
+              {isExpense ? t.plannerSourceLabelExpense : t.plannerSourceLabelIncome}
             </Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder={isExpense ? 'Оренда, підписка...' : 'Від кого / звідки'}
+              placeholder={isExpense ? t.plannerSourcePlaceholderExpense : t.plannerSourcePlaceholderIncome}
               placeholderTextColor={theme.subtext}
               value={source}
               onChangeText={setSource}
@@ -366,7 +368,7 @@ function PlannerFormModal({
             <Text style={[styles.label, { color: theme.subtext }]}>Нотатки</Text>
             <TextInput
               style={[styles.input, { height: 80, backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder="Коментар..."
+              placeholder={t.plannerCommentPlaceholder}
               placeholderTextColor={theme.subtext}
               value={notes}
               onChangeText={setNotes}
@@ -415,6 +417,7 @@ export function PlannerScreen() {
   const { accounts, loadAccounts } = useAccountsStore();
   const [showModal, setShowModal]   = useState(false);
   const [editItem,  setEditItem]    = useState<PlannedIncome | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { show, element: alertEl } = useAppAlert();
 
   useEffect(() => {
@@ -422,13 +425,20 @@ export function PlannerScreen() {
     loadAccounts();
   }, []);
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadItems();
+    loadAccounts();
+    setRefreshing(false);
+  }, []);
+
   function handleConfirm(id: string) {
     const item = items.find((i) => i.id === id);
     const isExpense = item?.planType === 'expense';
-    show('Підтвердження', isExpense ? 'Позначити як оплачено?' : 'Позначити надходження як отримане?', [
+    show(t.plannerConfirmTitle, isExpense ? t.plannerMarkPaidConfirm : t.plannerMarkReceivedConfirm, [
       { text: t.cancel, style: 'cancel' },
       {
-        text: 'Так',
+        text: t.yes,
         onPress: () => {
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           updateStatus(id, 'received_manual');
@@ -438,8 +448,8 @@ export function PlannerScreen() {
   }
 
   function handleCancel(id: string) {
-    show('Скасування', 'Скасувати плановий запис?', [
-      { text: 'Ні', style: 'cancel' },
+    show(t.plannerCancelTitle, t.plannerCancelConfirm, [
+      { text: t.no, style: 'cancel' },
       {
         text: t.cancel, style: 'destructive',
         onPress: () => {
@@ -485,6 +495,7 @@ export function PlannerScreen() {
       <FlatList
         data={[...pending, ...done]}
         keyExtractor={(i) => i.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
         renderItem={({ item }) => (
           <PlannerCard
             item={item}

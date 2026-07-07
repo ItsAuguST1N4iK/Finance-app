@@ -132,10 +132,13 @@ export interface AnalyticsSummary {
 }
 
 export interface PlatformShare {
+  accountId: string;
+  accountName: string;
   platform: Platform;
-  type: TransactionType;
+  type: 'income' | 'expense';
   platformTotal: number;
   sharePct: number;    // 0–100
+  color?: string;
 }
 
 export interface CategoryTotal {

@@ -33,6 +33,8 @@ export interface Translations {
   txNoResults: string;
   txFilters: string;
   txPlatforms: string;
+  txFilterAccounts: string;
+  txFilterAll: string;
   txTypes: string;
   txCurrency: string;
   txReset: string;
@@ -167,6 +169,22 @@ export interface Translations {
 
   settingsReAutoTag: string;
   settingsReAutoTagHint: string;
+  settingsCardsAndTags: string;
+  settingsRetagging: string;
+  settingsRetagSuccess: string;
+  settingsDataDeleted: string;
+  settingsResetDone: string;
+  settingsTokenMissing: string;
+  settingsTokenMissingHint: string;
+  settingsMonoConnecting: string;
+  settingsMonoRateLimit: string;
+  settingsMonoPause: string;
+  settingsMonoSyncDone: string;
+  settingsMonoSyncNoNew: string;
+  settingsSyncError: string;
+  settingsMonoApiSync: string;
+  settingsCsvImportLabel: string;
+  settingsMonoCsvInstructions: string;
   settingsMonobankLimit: string;
   settingsMonobankLimitHint: string;
   settingsZen: string;
@@ -186,6 +204,48 @@ export interface Translations {
   importCsvSectionTitle: string;
   importCsvSelectAccount: string;
   importCsvNoAccounts: string;
+  importCsvNoTx: string;
+  importCsvImportedTitle: string;
+  importDuplicatesTitle: string;
+  importDuplicatesMessage: string;
+  importAddAnyway: string;
+  importRejectDuplicates: string;
+  importCurrencyLabel: string;
+  importCurrencyAccount: string;
+  importCurrencyOperation: string;
+
+  done: string;
+  yes: string;
+  no: string;
+  datePickerDefaultTitle: string;
+
+  plannerSourceFrom: string;
+  plannerSourceTo: string;
+  plannerReceived: string;
+  plannerFreqOnce: string;
+  plannerFreqWeekly: string;
+  plannerFreqMonthly: string;
+  plannerFreqCustom: string;
+  plannerFillRequired: string;
+  plannerAccountError: string;
+  plannerNamePlaceholder: string;
+  plannerSourceLabelExpense: string;
+  plannerSourceLabelIncome: string;
+  plannerSourcePlaceholderExpense: string;
+  plannerSourcePlaceholderIncome: string;
+  plannerCommentPlaceholder: string;
+  plannerConfirmTitle: string;
+  plannerMarkPaidConfirm: string;
+  plannerMarkReceivedConfirm: string;
+  plannerCancelTitle: string;
+  plannerCancelConfirm: string;
+  plannerStatusPending: string;
+  plannerStatusPaid: string;
+  plannerStatusReceived: string;
+  plannerStatusConfirmed: string;
+  plannerStatusOverdue: string;
+  plannerStatusCancelled: string;
+  plannerOverdueShort: string;
 
   // Reset
   settingsResetData: string;
@@ -202,7 +262,7 @@ const uk: Translations = {
   tabTransactions: 'Транзакції',
   tabPlanner: 'Планер',
   tabAnalytics: 'Аналітика',
-  tabSettings: 'Налашт.',
+  tabSettings: 'Налаштування',
 
   dashTotalBalance: 'Загальний баланс (UAH)',
   dashAccounts: 'Рахунки',
@@ -223,6 +283,8 @@ const uk: Translations = {
   txNoResults: 'Транзакцій не знайдено',
   txFilters: 'Фільтри',
   txPlatforms: 'Платформи',
+  txFilterAccounts: 'Рахунки',
+  txFilterAll: 'Всі',
   txTypes: 'Тип транзакції',
   txCurrency: 'Валюта',
   txReset: 'Скинути',
@@ -358,6 +420,22 @@ const uk: Translations = {
 
   settingsReAutoTag: 'Автовизначення тегів',
   settingsReAutoTagHint: 'Встановлює теги для транзакцій без тегу на основі MCC та опису',
+  settingsCardsAndTags: 'Картки та теги',
+  settingsRetagging: 'Визначаємо теги…',
+  settingsRetagSuccess: 'Оновлено теги та категорії для {count} транзакцій.',
+  settingsDataDeleted: 'Всі транзакції видалено.',
+  settingsResetDone: 'Налаштування скинуто до заводських.',
+  settingsTokenMissing: 'Токен відсутній',
+  settingsTokenMissingHint: 'Спочатку збережіть Monobank X-Token.',
+  settingsMonoConnecting: 'Підключення до Monobank…',
+  settingsMonoRateLimit: 'Ліміт API — чекаємо 65 с…',
+  settingsMonoPause: 'Пауза між запитами…',
+  settingsMonoSyncDone: 'Синхронізацію завершено!',
+  settingsMonoSyncNoNew: 'Нових транзакцій не знайдено.',
+  settingsSyncError: 'Помилка синхронізації',
+  settingsMonoApiSync: 'API — автосинхронізація (90 днів)',
+  settingsCsvImportLabel: 'CSV — імпорт виписки',
+  settingsMonoCsvInstructions: '1. Відкрий додаток Monobank\n2. На головному екрані натисни "···" (три крапки)\n3. Перейди: Виписка → Завантажити (.csv)\n4. Відправ файл на цей пристрій\n5. Обери картку нижче та натисни "Імпортувати файл"\n\n✅ CSV містить всю доступну історію без обмежень!',
   settingsMonobankLimit: 'Обмеження API Monobank',
   settingsMonobankLimitHint: 'Monobank дозволяє завантажити лише 90 днів виписки. Більш старі дані недоступні через API. Точка відліку — дата першого підключення.',
   settingsZen: 'ZEN Money (CSV)',
@@ -376,6 +454,48 @@ const uk: Translations = {
   importCsvSectionTitle: 'Імпорт виписок (CSV)',
   importCsvSelectAccount: 'Прив\'язати до картки',
   importCsvNoAccounts: 'Спочатку додайте рахунок у розділі «Картки»',
+  importCsvNoTx: 'Не знайдено транзакцій у файлі.',
+  importCsvImportedTitle: '{label}: Імпортовано',
+  importDuplicatesTitle: 'Можливі дублікати',
+  importDuplicatesMessage: 'З {dup} із {total} транзакцій збігаються з уже наявними (дата, час, сума, платформа, назва). Додати їх знову?',
+  importAddAnyway: 'Все одно додати',
+  importRejectDuplicates: 'Відхилити',
+  importCurrencyLabel: 'Валюта для запису транзакцій',
+  importCurrencyAccount: 'Валюта рахунку ({currency})',
+  importCurrencyOperation: 'Валюта операції (з CSV)',
+
+  done: 'Готово',
+  yes: 'Так',
+  no: 'Ні',
+  datePickerDefaultTitle: 'Оберіть дату',
+
+  plannerSourceFrom: 'Від:',
+  plannerSourceTo: 'Куди:',
+  plannerReceived: 'Отримано',
+  plannerFreqOnce: 'Один раз',
+  plannerFreqWeekly: 'Щотижня',
+  plannerFreqMonthly: 'Щомісяця',
+  plannerFreqCustom: 'Кастомно',
+  plannerFillRequired: 'Заповніть назву та суму.',
+  plannerAccountError: 'Не вдалося визначити рахунок.',
+  plannerNamePlaceholder: 'Зарплата, фріланс...',
+  plannerSourceLabelExpense: 'Куди / на що',
+  plannerSourceLabelIncome: 'Джерело',
+  plannerSourcePlaceholderExpense: 'Оренда, підписка...',
+  plannerSourcePlaceholderIncome: 'Від кого / звідки',
+  plannerCommentPlaceholder: 'Коментар...',
+  plannerConfirmTitle: 'Підтвердження',
+  plannerMarkPaidConfirm: 'Позначити як оплачено?',
+  plannerMarkReceivedConfirm: 'Позначити надходження як отримане?',
+  plannerCancelTitle: 'Скасування',
+  plannerCancelConfirm: 'Скасувати плановий запис?',
+  plannerStatusPending: '⏳ Очікується',
+  plannerStatusPaid: '✅ Оплачено',
+  plannerStatusReceived: '✅ Отримано',
+  plannerStatusConfirmed: '✅ Підтверджено',
+  plannerStatusOverdue: '⚠️ Прострочено',
+  plannerStatusCancelled: '✗ Скасовано',
+  plannerOverdueShort: 'прострочено',
 
   settingsResetData: 'Скидання даних',
   settingsResetDataHint: 'Видаляє всі транзакції та аналітику',
@@ -412,6 +532,8 @@ const en: Translations = {
   txNoResults: 'No transactions found',
   txFilters: 'Filters',
   txPlatforms: 'Platforms',
+  txFilterAccounts: 'Accounts',
+  txFilterAll: 'All',
   txTypes: 'Transaction Type',
   txCurrency: 'Currency',
   txReset: 'Reset',
@@ -547,6 +669,22 @@ const en: Translations = {
 
   settingsReAutoTag: 'Auto-detect Tags',
   settingsReAutoTagHint: 'Sets tags for untagged transactions based on MCC and description',
+  settingsCardsAndTags: 'Cards & Tags',
+  settingsRetagging: 'Detecting tags…',
+  settingsRetagSuccess: 'Updated tags and categories for {count} transactions.',
+  settingsDataDeleted: 'All transactions deleted.',
+  settingsResetDone: 'Settings reset to factory defaults.',
+  settingsTokenMissing: 'Token missing',
+  settingsTokenMissingHint: 'Save your Monobank X-Token first.',
+  settingsMonoConnecting: 'Connecting to Monobank…',
+  settingsMonoRateLimit: 'API rate limit — waiting 65 s…',
+  settingsMonoPause: 'Pause between requests…',
+  settingsMonoSyncDone: 'Sync complete!',
+  settingsMonoSyncNoNew: 'No new transactions found.',
+  settingsSyncError: 'Sync error',
+  settingsMonoApiSync: 'API — auto-sync (90 days)',
+  settingsCsvImportLabel: 'CSV — statement import',
+  settingsMonoCsvInstructions: '1. Open the Monobank app\n2. On the home screen tap "···" (three dots)\n3. Go to: Statement → Download (.csv)\n4. Send the file to this device\n5. Select a card below and tap "Import file"\n\n✅ CSV contains full available history with no limits!',
   settingsMonobankLimit: 'Monobank API Limit',
   settingsMonobankLimitHint: 'Monobank only allows loading the last 90 days of statements. Older data is unavailable via API. The cutoff date is 90 days before the first sync.',
   settingsZen: 'ZEN Money (CSV)',
@@ -565,6 +703,48 @@ const en: Translations = {
   importCsvSectionTitle: 'Statement import (CSV)',
   importCsvSelectAccount: 'Link to card',
   importCsvNoAccounts: 'Add an account in Cards section first',
+  importCsvNoTx: 'No transactions found in the file.',
+  importCsvImportedTitle: '{label}: Imported',
+  importDuplicatesTitle: 'Possible duplicates',
+  importDuplicatesMessage: '{dup} of {total} transactions match existing ones (date, time, amount, platform, name). Add them again?',
+  importAddAnyway: 'Add anyway',
+  importRejectDuplicates: 'Reject',
+  importCurrencyLabel: 'Transaction currency',
+  importCurrencyAccount: 'Account currency ({currency})',
+  importCurrencyOperation: 'Operation currency (from CSV)',
+
+  done: 'Done',
+  yes: 'Yes',
+  no: 'No',
+  datePickerDefaultTitle: 'Select date',
+
+  plannerSourceFrom: 'From:',
+  plannerSourceTo: 'To:',
+  plannerReceived: 'Received',
+  plannerFreqOnce: 'Once',
+  plannerFreqWeekly: 'Weekly',
+  plannerFreqMonthly: 'Monthly',
+  plannerFreqCustom: 'Custom',
+  plannerFillRequired: 'Fill in name and amount.',
+  plannerAccountError: 'Could not determine account.',
+  plannerNamePlaceholder: 'Salary, freelance...',
+  plannerSourceLabelExpense: 'Where / what for',
+  plannerSourceLabelIncome: 'Source',
+  plannerSourcePlaceholderExpense: 'Rent, subscription...',
+  plannerSourcePlaceholderIncome: 'From whom / where',
+  plannerCommentPlaceholder: 'Comment...',
+  plannerConfirmTitle: 'Confirm',
+  plannerMarkPaidConfirm: 'Mark as paid?',
+  plannerMarkReceivedConfirm: 'Mark income as received?',
+  plannerCancelTitle: 'Cancel',
+  plannerCancelConfirm: 'Cancel planned entry?',
+  plannerStatusPending: '⏳ Pending',
+  plannerStatusPaid: '✅ Paid',
+  plannerStatusReceived: '✅ Received',
+  plannerStatusConfirmed: '✅ Confirmed',
+  plannerStatusOverdue: '⚠️ Overdue',
+  plannerStatusCancelled: '✗ Cancelled',
+  plannerOverdueShort: 'overdue',
 
   settingsResetData: 'Reset Data',
   settingsResetDataHint: 'Deletes all transactions and analytics',

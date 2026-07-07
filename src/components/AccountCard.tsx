@@ -1,0 +1,187 @@
+import React, { useRef, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Animated,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeContext';
+import type { Account } from '../types';
+import { currencySymbol } from '../utils/currency';
+
+interface Props {
+  account: Account;
+  index: number;
+  selected: boolean;
+  scrollX: Animated.Value;
+  onSelect: () => void;
+  onEdit: () => void;
+}
+
+const CARD_W = 200;
+const CARD_GAP = 12;
+const SNAP = CARD_W + CARD_GAP;
+
+export const ACCOUNT_CARD_SNAP = SNAP;
+export const ACCOUNT_CARD_WIDTH = CARD_W;
+export const ACCOUNT_CARD_GAP = CARD_GAP;
+
+export function AccountCard({
+  account, index, selected, scrollX, onSelect, onEdit,
+}: Props) {
+  const { theme } = useTheme();
+  const cardColor = account.color ?? '#1e293b';
+
+  const scaleAnim = useRef(new Animated.Value(selected ? 1.05 : 1)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: selected ? 1.05 : 1,
+      useNativeDriver: true,
+      stiffness: 200,
+      damping: 16,
+      mass: 1,
+    }).start();
+  }, [selected, scaleAnim]);
+
+  const inputRange = [
+    (index - 1) * SNAP,
+    index * SNAP,
+    (index + 1) * SNAP,
+  ];
+
+  const rotateY = scrollX.interpolate({
+    inputRange,
+    outputRange: ['18deg', '0deg', '-18deg'],
+    extrapolate: 'clamp',
+  });
+
+  const arcScale = scrollX.interpolate({
+    inputRange,
+    outputRange: [0.9, 1.05, 0.9],
+    extrapolate: 'clamp',
+  });
+
+  const translateY = scrollX.interpolate({
+    inputRange,
+    outputRange: [10, -4, 10],
+    extrapolate: 'clamp',
+  });
+
+  function onPressIn() {
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      stiffness: 300,
+      damping: 12,
+    }).start();
+  }
+
+  function onPressOut() {
+    Animated.spring(scaleAnim, {
+      toValue: selected ? 1.05 : 1,
+      useNativeDriver: true,
+      stiffness: 200,
+      damping: 14,
+    }).start();
+  }
+
+  return (
+    <Animated.View
+      style={[
+        styles.wrapper,
+        {
+          transform: [
+            { perspective: 900 },
+            { translateY },
+            { rotateY },
+            { scale: Animated.multiply(scaleAnim, arcScale) },
+          ],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.card,
+            borderColor: selected ? cardColor : theme.border,
+            borderWidth: selected ? 2 : 1,
+          },
+        ]}
+        onPress={onSelect}
+        onLongPress={onEdit}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={1}
+      >
+        <View style={[styles.colorBar, { backgroundColor: cardColor }]} />
+        <View style={[styles.tint, { backgroundColor: cardColor + '18' }]} />
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={[styles.platform, { color: cardColor }]}>
+              {account.platform.toUpperCase()}
+            </Text>
+            <TouchableOpacity
+              onPress={onEdit}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="pencil-outline" size={14} color={theme.subtext} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.balance, { color: theme.text }]}>
+            {account.balance != null
+              ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)}`
+              : '—'}
+          </Text>
+          <Text style={[styles.name, { color: theme.subtext }]} numberOfLines={1}>
+            {account.displayName ?? account.name}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrapper: {
+    width: CARD_W,
+    marginRight: CARD_GAP,
+  },
+  card: {
+    borderRadius: 16,
+    minHeight: 100,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  colorBar: {
+    width: 3,
+    borderRadius: 2,
+  },
+  tint: {
+    ...StyleSheet.absoluteFillObject,
+    left: 3,
+  },
+  content: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  platform: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  balance: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginVertical: 4,
+  },
+  name: {
+    fontSize: 11,
+  },
+});

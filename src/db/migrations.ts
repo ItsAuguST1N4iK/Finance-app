@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6 } from './schema';
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7 } from './schema';
 
-const LATEST_VERSION = 6;
+const LATEST_VERSION = 7;
 
 const MIGRATIONS: Record<number, string> = {
   1: SCHEMA_V1,
@@ -10,6 +10,7 @@ const MIGRATIONS: Record<number, string> = {
   4: SCHEMA_V4,
   5: SCHEMA_V5,
   6: SCHEMA_V6,
+  7: SCHEMA_V7,
 };
 
 let db: SQLite.SQLiteDatabase | null = null;

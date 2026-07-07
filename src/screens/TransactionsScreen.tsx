@@ -1,17 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Modal,
   TextInput, TouchableOpacity, ScrollView, LayoutAnimation,
-  Platform, UIManager, KeyboardAvoidingView,
+  Platform, UIManager, KeyboardAvoidingView, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTransactionsStore } from '../store/transactionsSlice';
 import { useAccountsStore }      from '../store/accountsSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { DatePickerModal } from '../components/DatePickerModal';
-import type { UnifiedTransaction, Platform as Plat, TransactionType } from '../types';
+import { TransactionListItem } from '../components/TransactionListItem';
+import { DateSeparator } from '../components/DateSeparator';
+import { TxDetailModal } from '../components/TxDetailModal';
+import { useTagLabels } from '../hooks/useTagLabels';
+import type { UnifiedTransaction, Platform as Plat, TransactionType, Account } from '../types';
 import { currencySymbol } from '../utils/currency';
 import { ALL_TAGS, TagType } from '../utils/tags';
 import { format } from 'date-fns';
@@ -21,326 +26,11 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const PLATFORMS: Plat[]        = ['monobank', 'ibkr', 'privatbank', 'zen', 'manual'];
+type FilterPlatform = Exclude<Plat, 'manual'>;
+
+const PLATFORMS: FilterPlatform[] = ['monobank', 'ibkr', 'privatbank', 'zen'];
 const TYPES: TransactionType[] = ['income', 'expense', 'transfer', 'fee'];
 const CURRENCIES               = ['UAH', 'USD', 'EUR', 'GBP', 'CHF', 'PLN', 'CZK', 'CAD', 'AUD', 'JPY'];
-
-// ─── Tag helpers ──────────────────────────────────────
-
-function useTagLabels() {
-  const { t } = useLanguage();
-  const labels: Record<string, string> = {
-    entertainment: t.tagEntertainment,
-    utilities:     t.tagUtilities,
-    electronics:   t.tagElectronics,
-    self_transfer: t.tagSelfTransfer,
-    transfer:      t.tagTransfer,
-    top_up:        t.tagTopUp,
-  };
-  return labels;
-}
-
-// ─── Transaction Detail Modal ─────────────────────────
-
-function TxDetailModal({
-  item,
-  visible,
-  onClose,
-}: {
-  item: UnifiedTransaction | null;
-  visible: boolean;
-  onClose: () => void;
-}) {
-  const { theme } = useTheme();
-  const { t }     = useLanguage();
-  const { updateTransactionTag } = useTransactionsStore();
-  const { accounts } = useAccountsStore();
-  const tagLabels = useTagLabels();
-
-  const [showTagPicker, setShowTagPicker] = useState(false);
-
-  if (!item) return null;
-
-  const tx = item;
-
-  const sign      = tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : '';
-  const amtColor  = tx.type === 'income' ? theme.income : tx.type === 'expense' ? theme.expense : theme.subtext;
-  const account   = accounts.find((a) => a.id === tx.accountId);
-  const accountLabel = account ? (account.displayName ?? account.name) : tx.accountId;
-
-  function handleTagSelect(tag: TagType | null) {
-    updateTransactionTag(tx.id, tag);
-    setShowTagPicker(false);
-  }
-
-  const tagLabel = tx.tag ? (tagLabels[tx.tag] ?? tx.tag) : t.tagNoTag;
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-      <View style={[dtStyles.overlay, { backgroundColor: theme.overlay }]}>
-        <View style={[dtStyles.sheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {/* Header */}
-          <View style={dtStyles.header}>
-            <Text style={[dtStyles.title, { color: theme.text }]}>{t.txDetail}</Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.75}>
-              <Ionicons name="close" size={22} color={theme.subtext} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* Amount */}
-            <View style={[dtStyles.amountBox, { backgroundColor: amtColor + '18', borderColor: amtColor + '44' }]}>
-              <Text style={[dtStyles.amount, { color: amtColor }]}>
-                {sign}{Math.abs(tx.amount).toLocaleString('uk-UA', { maximumFractionDigits: 2 })}
-              </Text>
-              <Text style={[dtStyles.currency, { color: amtColor }]}>
-                {currencySymbol(tx.currency)} {tx.currency}
-              </Text>
-            </View>
-
-            {/* Description */}
-            {tx.description && (
-              <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>Опис</Text>
-                <Text style={[dtStyles.rowValue, { color: theme.text }]}>{tx.description}</Text>
-              </View>
-            )}
-
-            {/* Account */}
-            <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-              <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>{t.txAccount}</Text>
-              <View style={{ alignItems: 'flex-end', flex: 1 }}>
-                <Text style={[dtStyles.rowValue, { color: theme.text }]}>{accountLabel}</Text>
-                {account?.name && account.name !== accountLabel && (
-                  <Text style={{ fontSize: 11, color: theme.subtext, marginTop: 2 }}>{account.name}</Text>
-                )}
-                {account?.iban && (
-                  <Text style={{ fontSize: 10, color: theme.subtext, marginTop: 1 }}>{account.iban}</Text>
-                )}
-              </View>
-            </View>
-
-            {/* Date & time */}
-            <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-              <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>{t.txExactDate}</Text>
-              <Text style={[dtStyles.rowValue, { color: theme.text }]}>
-                {format(tx.transactionDate, 'd MMMM yyyy, HH:mm', { locale: uk })}
-              </Text>
-            </View>
-
-            {/* Platform */}
-            <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-              <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>Платформа</Text>
-              <Text style={[dtStyles.rowValue, { color: theme.accent }]}>{tx.platform}</Text>
-            </View>
-
-            {/* Type */}
-            <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-              <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>Тип</Text>
-              <Text style={[dtStyles.rowValue, { color: amtColor }]}>{tx.type}</Text>
-            </View>
-
-            {/* Fee */}
-            {tx.feeAmount > 0 && (
-              <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>{t.txFee}</Text>
-                <Text style={[dtStyles.rowValue, { color: theme.warning }]}>
-                  {tx.feeAmount.toLocaleString('uk-UA')} {tx.feeCurrency ?? tx.currency}
-                </Text>
-              </View>
-            )}
-
-            {/* Counterparty */}
-            {tx.counterparty && (
-              <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>Контрагент</Text>
-                <Text style={[dtStyles.rowValue, { color: theme.text }]}>{tx.counterparty}</Text>
-              </View>
-            )}
-
-            {/* MCC */}
-            {tx.mcc != null && (
-              <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>{t.txMcc}</Text>
-                <Text style={[dtStyles.rowValue, { color: theme.subtext }]}>{tx.mcc}</Text>
-              </View>
-            )}
-
-            {/* Tag row — editable */}
-            <View style={[dtStyles.row, { borderBottomColor: theme.border }]}>
-              <Text style={[dtStyles.rowLabel, { color: theme.subtext }]}>{t.tagLabel}</Text>
-              <TouchableOpacity
-                style={[dtStyles.tagChip, {
-                  backgroundColor: tx.tag ? theme.accent + '22' : theme.cardAlt,
-                  borderColor: tx.tag ? theme.accent : theme.border,
-                }]}
-                onPress={() => setShowTagPicker(true)}
-                activeOpacity={0.75}
-              >
-                <Text style={[dtStyles.tagChipText, { color: tx.tag ? theme.accent : theme.subtext }]}>
-                  {tagLabel}
-                </Text>
-                <Ionicons name="pencil-outline" size={12} color={tx.tag ? theme.accent : theme.subtext} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Tag picker */}
-            {showTagPicker && (
-              <View style={[dtStyles.tagPickerBox, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
-                <TouchableOpacity
-                  style={[dtStyles.tagOption, { borderColor: theme.border }, !tx.tag && { backgroundColor: theme.accent + '22' }]}
-                  onPress={() => handleTagSelect(null)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[dtStyles.tagOptionText, { color: !tx.tag ? theme.accent : theme.subtext }]}>
-                    {t.tagNoTag}
-                  </Text>
-                </TouchableOpacity>
-                {ALL_TAGS.map((tag) => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={[dtStyles.tagOption, { borderColor: theme.border }, tx.tag === tag && { backgroundColor: theme.accent + '22' }]}
-                    onPress={() => handleTagSelect(tag)}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[dtStyles.tagOptionText, { color: tx.tag === tag ? theme.accent : theme.text }]}>
-                      {tagLabels[tag] ?? tag}
-                    </Text>
-                    {tx.tag === tag && <Ionicons name="checkmark" size={14} color={theme.accent} />}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-const dtStyles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  sheet:   {
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderTopWidth: 1, padding: 20, maxHeight: '85%',
-  },
-  header:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title:   { fontSize: 18, fontWeight: '700' },
-  amountBox: {
-    borderRadius: 14, padding: 16, marginBottom: 16,
-    flexDirection: 'row', alignItems: 'baseline', gap: 6,
-    borderWidth: 1,
-  },
-  amount:   { fontSize: 28, fontWeight: '800' },
-  currency: { fontSize: 16, fontWeight: '600' },
-  row: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1, gap: 12,
-  },
-  rowLabel: { fontSize: 13, minWidth: 90 },
-  rowValue: { fontSize: 14, flex: 1, textAlign: 'right' },
-  tagChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1,
-  },
-  tagChipText: { fontSize: 13, fontWeight: '500' },
-  tagPickerBox: {
-    borderRadius: 12, borderWidth: 1, padding: 8,
-    marginTop: 4, marginBottom: 8, gap: 2,
-  },
-  tagOption: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, marginBottom: 4,
-  },
-  tagOptionText: { fontSize: 13 },
-});
-
-// ─── Date Separator ──────────────────────────────────
-
-function DateSeparator({ label }: { label: string }) {
-  const { theme } = useTheme();
-  return (
-    <View style={sepStyles.row}>
-      <View style={[sepStyles.line, { backgroundColor: theme.border }]} />
-      <Text style={[sepStyles.label, { color: theme.subtext, backgroundColor: theme.bg }]}>{label}</Text>
-      <View style={[sepStyles.line, { backgroundColor: theme.border }]} />
-    </View>
-  );
-}
-
-const sepStyles = StyleSheet.create({
-  row:   { flexDirection: 'row', alignItems: 'center', marginVertical: 8, paddingHorizontal: 16 },
-  line:  { flex: 1, height: 1 },
-  label: { fontSize: 11, fontWeight: '600', paddingHorizontal: 10, textAlign: 'center' },
-});
-
-// ─── Transaction Item ─────────────────────────────────
-
-function TxItem({
-  item, tagLabels, accountColor, accountName, onPress,
-}: {
-  item: UnifiedTransaction;
-  tagLabels: Record<string, string>;
-  accountColor: string;
-  accountName: string;
-  onPress: () => void;
-}) {
-  const { theme } = useTheme();
-  const { t }     = useLanguage();
-  const isCancellation = /^Cancellation\./i.test(item.description ?? '');
-  const sign     = item.type === 'income' ? '+' : item.type === 'expense' ? '−' : '';
-  const amtColor = item.type === 'income' ? theme.income : item.type === 'expense' ? theme.expense : theme.subtext;
-  const sym      = currencySymbol(item.currency);
-
-  return (
-    <TouchableOpacity
-      style={[styles.txItem, { borderBottomColor: theme.border, opacity: isCancellation ? 0.6 : 1 }]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      {/* Account color left bar */}
-      <View style={[styles.txColorBar, { backgroundColor: accountColor }]} />
-      <View style={styles.txLeft}>
-        <Text style={[styles.txDesc, { color: theme.text }]} numberOfLines={1}>
-          {item.description ?? item.category ?? t.txTransaction}
-        </Text>
-        <View style={styles.txMeta}>
-          <Text style={[styles.txPlatform, { color: accountColor }]}>{accountName}</Text>
-          <Text style={[styles.txDot, { color: theme.subtext }]}> · </Text>
-          <Text style={[styles.txDate, { color: theme.subtext }]}>
-            {format(item.transactionDate, 'd MMM, HH:mm', { locale: uk })}
-          </Text>
-          {item.tag && (
-            <>
-              <Text style={[styles.txDot, { color: theme.subtext }]}> · </Text>
-              <Text style={[styles.txTag, { color: theme.accent }]}>
-                {tagLabels[item.tag] ?? item.tag}
-              </Text>
-            </>
-          )}
-          {item.feeAmount > 0 && (
-            <>
-              <Text style={[styles.txDot, { color: theme.subtext }]}> · </Text>
-              <Text style={[styles.txFee, { color: theme.warning }]}>
-                {t.txFee} {item.feeAmount.toLocaleString('uk-UA')} {item.feeCurrency ?? item.currency}
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-      <View style={styles.txAmountCol}>
-        <Text style={[styles.txAmount, { color: amtColor }]}>
-          {sign}{Math.abs(item.amount).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} {sym}
-        </Text>
-        {item.currency !== 'UAH' && (
-          <Text style={[styles.txCurrency, { color: theme.subtext }]}>{item.currency}</Text>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 // ─── Filter Chip ──────────────────────────────────────
 
@@ -369,10 +59,13 @@ const chipStyles = StyleSheet.create({
 // ─── Island Filter Bar ────────────────────────────────
 
 interface FilterBarProps {
-  selPlatforms: Plat[];
-  setSelPlatforms: (p: Plat[]) => void;
+  selPlatforms: FilterPlatform[];
+  setSelPlatforms: (p: FilterPlatform[]) => void;
   selTypes: TransactionType[];
   setSelTypes: (t: TransactionType[]) => void;
+  selAccountId: string | null;
+  setSelAccountId: (id: string | null) => void;
+  accounts: Account[];
   dateFrom: Date | null;
   dateTo: Date | null;
   setDateFrom: (d: Date | null) => void;
@@ -381,7 +74,7 @@ interface FilterBarProps {
   setSelCurrency: (c: string | null) => void;
   selTag: string | null;
   setSelTag: (tag: string | null) => void;
-  platformLabels: Record<Plat, string>;
+  platformLabels: Record<FilterPlatform, string>;
   typeLabels: Record<TransactionType, string>;
   tagLabels: Record<string, string>;
   onOpenFilters: () => void;
@@ -389,6 +82,7 @@ interface FilterBarProps {
 
 function FilterBar({
   selPlatforms, setSelPlatforms, selTypes, setSelTypes,
+  selAccountId, setSelAccountId, accounts,
   dateFrom, dateTo, setDateFrom, setDateTo,
   selCurrency, setSelCurrency,
   selTag, setSelTag,
@@ -398,6 +92,12 @@ function FilterBar({
   const { t }     = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
+  const accountName = selAccountId
+    ? (accounts.find((a) => a.id === selAccountId)?.displayName
+      ?? accounts.find((a) => a.id === selAccountId)?.name
+      ?? selAccountId)
+    : null;
+
   const allChips: Array<{ id: string; label: string; onRemove: () => void }> = [
     ...selPlatforms.map((p) => ({
       id: `p-${p}`, label: platformLabels[p],
@@ -406,6 +106,14 @@ function FilterBar({
         setSelPlatforms(selPlatforms.filter((x) => x !== p));
       },
     })),
+    ...(selAccountId && accountName ? [{
+      id: 'account',
+      label: accountName,
+      onRemove: () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSelAccountId(null);
+      },
+    }] : []),
     ...selTypes.map((ty) => ({
       id: `t-${ty}`, label: typeLabels[ty],
       onRemove: () => {
@@ -427,7 +135,6 @@ function FilterBar({
       onRemove: () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setDateFrom(null);
-        setDateTo(null); // Linked: clearing From also clears To
       },
     }] : []),
     ...(dateTo ? [{
@@ -500,10 +207,13 @@ const fbStyles = StyleSheet.create({
 interface FilterModalProps {
   visible: boolean;
   onClose: () => void;
-  selPlatforms: Plat[];
-  setSelPlatforms: (p: Plat[]) => void;
+  selPlatforms: FilterPlatform[];
+  setSelPlatforms: (p: FilterPlatform[]) => void;
   selTypes: TransactionType[];
   setSelTypes: (t: TransactionType[]) => void;
+  selAccountId: string | null;
+  setSelAccountId: (id: string | null) => void;
+  accounts: Account[];
   dateFrom: Date | null;
   dateTo: Date | null;
   setDateFrom: (d: Date | null) => void;
@@ -514,14 +224,15 @@ interface FilterModalProps {
   setSelTag: (tag: string | null) => void;
   onApply: () => void;
   onReset: () => void;
-  platformLabels: Record<Plat, string>;
+  platformLabels: Record<FilterPlatform, string>;
   typeLabels: Record<TransactionType, string>;
   tagLabels: Record<string, string>;
 }
 
 function FilterModal({
   visible, onClose, selPlatforms, setSelPlatforms,
-  selTypes, setSelTypes, dateFrom, dateTo, setDateFrom, setDateTo,
+  selTypes, setSelTypes, selAccountId, setSelAccountId, accounts,
+  dateFrom, dateTo, setDateFrom, setDateTo,
   selCurrency, setSelCurrency, selTag, setSelTag,
   onApply, onReset, platformLabels, typeLabels, tagLabels,
 }: FilterModalProps) {
@@ -530,20 +241,26 @@ function FilterModal({
   const [dateFromOpen, setDateFromOpen] = useState(false);
   const [dateToOpen,   setDateToOpen]   = useState(false);
 
-  const dateRangeLinked = !!(dateFrom || dateTo);
+  const eligibleAccounts = accounts.filter(
+    (a) => a.id !== 'acc_default' && selPlatforms.includes(a.platform as FilterPlatform),
+  );
 
-  function togglePlatform(p: Plat) {
-    setSelPlatforms(selPlatforms.includes(p) ? selPlatforms.filter((x) => x !== p) : [...selPlatforms, p]);
+  function togglePlatform(p: FilterPlatform) {
+    const next = selPlatforms.includes(p)
+      ? selPlatforms.filter((x) => x !== p)
+      : [...selPlatforms, p];
+    setSelPlatforms(next);
+    if (next.length === 0) setSelAccountId(null);
+    else if (selAccountId && !eligibleAccounts.find((a) => a.id === selAccountId)) {
+      setSelAccountId(null);
+    }
   }
   function toggleType(ty: TransactionType) {
     setSelTypes(selTypes.includes(ty) ? selTypes.filter((x) => x !== ty) : [...selTypes, ty]);
   }
-  function clearDateRange() {
-    setDateFrom(null);
-    setDateTo(null);
-  }
 
   const activeCount = selPlatforms.length + selTypes.length
+    + (selAccountId ? 1 : 0)
     + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selTag ? 1 : 0);
 
   return (
@@ -576,6 +293,48 @@ function FilterModal({
                 );
               })}
             </View>
+
+            {selPlatforms.length > 0 && (
+              <>
+                <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 16 }]}>
+                  {t.txFilterAccounts}
+                </Text>
+                <View style={fStyles.chipsSection}>
+                  <TouchableOpacity
+                    style={[fStyles.optionChip, {
+                      backgroundColor: !selAccountId ? theme.accent + '22' : theme.cardAlt,
+                      borderColor: !selAccountId ? theme.accent : theme.border,
+                    }]}
+                    onPress={() => setSelAccountId(null)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[fStyles.optionText, { color: !selAccountId ? theme.accent : theme.subtext }]}>
+                      {t.txFilterAll}
+                    </Text>
+                    {!selAccountId && <Ionicons name="checkmark" size={14} color={theme.accent} />}
+                  </TouchableOpacity>
+                  {eligibleAccounts.map((acc) => {
+                    const active = selAccountId === acc.id;
+                    return (
+                      <TouchableOpacity
+                        key={acc.id}
+                        style={[fStyles.optionChip, {
+                          backgroundColor: active ? theme.accent + '22' : theme.cardAlt,
+                          borderColor: active ? theme.accent : theme.border,
+                        }]}
+                        onPress={() => setSelAccountId(active ? null : acc.id)}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[fStyles.optionText, { color: active ? theme.accent : theme.subtext }]} numberOfLines={1}>
+                          {acc.displayName ?? acc.name}
+                        </Text>
+                        {active && <Ionicons name="checkmark" size={14} color={theme.accent} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
             {/* Types */}
             <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 16 }]}>{t.txTypes}</Text>
@@ -611,19 +370,10 @@ function FilterModal({
               })}
             </View>
 
-            {/* Date range — linked filters */}
-            <View style={[fStyles.dateRangeHeader, { marginTop: 16 }]}>
-              <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 0 }]}>{t.txDateFrom} / {t.txDateTo}</Text>
-              {dateRangeLinked && (
-                <View style={[fStyles.linkedBadge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
-                  <Ionicons name="link-outline" size={11} color={theme.accent} />
-                  <Text style={[fStyles.linkedText, { color: theme.accent }]}>Пов'язані</Text>
-                  <TouchableOpacity onPress={clearDateRange} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
-                    <Ionicons name="close" size={11} color={theme.accent} />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            {/* Date range */}
+            <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 16 }]}>
+              {t.txDateFrom} / {t.txDateTo}
+            </Text>
             <View style={fStyles.dateRow}>
               <TouchableOpacity
                 style={[fStyles.datePicker, { backgroundColor: dateFrom ? theme.accent + '22' : theme.cardAlt, borderColor: dateFrom ? theme.accent : theme.border, flex: 1 }]}
@@ -634,19 +384,19 @@ function FilterModal({
                   {dateFrom ? format(dateFrom, 'dd.MM.yyyy') : t.txDateFrom}
                 </Text>
                 {dateFrom && (
-                  <TouchableOpacity onPress={() => { setDateFrom(null); setDateTo(null); }} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
+                  <TouchableOpacity onPress={() => setDateFrom(null)} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
                     <Ionicons name="close" size={13} color={theme.accent} />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
-              <Text style={[fStyles.dateSep, { color: dateRangeLinked ? theme.accent : theme.subtext, opacity: dateRangeLinked ? 1 : 0.5 }]}>→</Text>
+              <Text style={[fStyles.dateSep, { color: theme.subtext }]}>→</Text>
               <TouchableOpacity
                 style={[fStyles.datePicker, {
-                  backgroundColor: dateTo ? theme.accent + '22' : (dateFrom ? theme.cardAlt : theme.cardAlt + '88'),
-                  borderColor: dateTo ? theme.accent : (dateFrom ? theme.border : theme.border + '44'),
-                  flex: 1, opacity: dateFrom ? 1 : 0.5,
+                  backgroundColor: dateTo ? theme.accent + '22' : theme.cardAlt,
+                  borderColor: dateTo ? theme.accent : theme.border,
+                  flex: 1,
                 }]}
-                onPress={() => { if (dateFrom) setDateToOpen(true); }} activeOpacity={0.75}
+                onPress={() => setDateToOpen(true)} activeOpacity={0.75}
               >
                 <Ionicons name="calendar-outline" size={14} color={dateTo ? theme.accent : theme.subtext} />
                 <Text style={[fStyles.dateText, { color: dateTo ? theme.accent : theme.subtext }]}>
@@ -659,11 +409,6 @@ function FilterModal({
                 )}
               </TouchableOpacity>
             </View>
-            {!dateFrom && (
-              <Text style={[fStyles.linkedHint, { color: theme.subtext }]}>
-                Оберіть дату "Від" щоб розблокувати дату "До"
-              </Text>
-            )}
 
             {/* Currency */}
             <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 16 }]}>{t.txCurrency}</Text>
@@ -737,13 +482,6 @@ const fStyles = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, gap: 6,
   },
   optionText: { fontSize: 13, fontWeight: '500' },
-  dateRangeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  linkedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1,
-  },
-  linkedText:  { fontSize: 11, fontWeight: '600' },
-  linkedHint:  { fontSize: 11, marginTop: 4, marginBottom: 8 },
   dateRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   datePicker: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -766,10 +504,12 @@ export function TransactionsScreen() {
   const { transactions, loadTransactions } = useTransactionsStore();
   const { accounts, loadAccounts } = useAccountsStore();
   const tagLabels = useTagLabels();
+  const [refreshing, setRefreshing] = useState(false);
 
   const [search,        setSearch]        = useState('');
-  const [selPlatforms,  setSelPlatforms]  = useState<Plat[]>([]);
+  const [selPlatforms,  setSelPlatforms]  = useState<FilterPlatform[]>([]);
   const [selTypes,      setSelTypes]      = useState<TransactionType[]>([]);
+  const [selAccountId,  setSelAccountId]  = useState<string | null>(null);
   const [dateFrom,      setDateFrom]      = useState<Date | null>(null);
   const [dateTo,        setDateTo]        = useState<Date | null>(null);
   const [selCurrency,   setSelCurrency]   = useState<string | null>(null);
@@ -777,59 +517,70 @@ export function TransactionsScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [detailTx,      setDetailTx]      = useState<UnifiedTransaction | null>(null);
 
-  const platformLabels: Record<Plat, string> = {
+  const platformLabels: Record<FilterPlatform, string> = {
     monobank: t.platformMonobank, ibkr: t.platformIbkr,
-    privatbank: t.platformPrivatbank, zen: t.platformZen, manual: t.platformManual,
+    privatbank: t.platformPrivatbank, zen: t.platformZen,
   };
   const typeLabels: Record<TransactionType, string> = {
     income: t.typeIncome, expense: t.typeExpense, transfer: t.typeTransfer, fee: t.typeFee,
   };
+
+  const buildFilter = useCallback(() => ({
+    platforms:  selPlatforms.length > 0 ? selPlatforms : undefined,
+    types:      selTypes.length > 0 ? selTypes : undefined,
+    accountId:  selAccountId ?? undefined,
+    searchText: search || undefined,
+    dateFrom:   dateFrom ? dateFrom.getTime() : undefined,
+    dateTo:     dateTo   ? dateTo.getTime()   : undefined,
+    currency:   selCurrency ?? undefined,
+    tag:        selTag ?? undefined,
+  }), [search, selPlatforms, selTypes, selAccountId, dateFrom, dateTo, selCurrency, selTag]);
 
   useEffect(() => {
     loadTransactions();
     loadAccounts();
   }, []);
 
-  // Clear dateTo when dateFrom is cleared (linked filters)
   useEffect(() => {
-    if (!dateFrom && dateTo) setDateTo(null);
-  }, [dateFrom]);
+    setSelAccountId(null);
+  }, [selPlatforms]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTransactions(buildFilter());
+    }, [buildFilter]),
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      loadTransactions({
-        platforms:  selPlatforms,
-        types:      selTypes,
-        searchText: search || undefined,
-        dateFrom:   dateFrom ? dateFrom.getTime() : undefined,
-        dateTo:     dateTo   ? dateTo.getTime()   : undefined,
-        currency:   selCurrency ?? undefined,
-        tag:        selTag ?? undefined,
-      });
+      loadTransactions(buildFilter());
     }, 350);
     return () => clearTimeout(timer);
-  }, [search, selPlatforms, selTypes, dateFrom, dateTo, selCurrency, selTag]);
+  }, [buildFilter]);
 
   function applyFilters() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    loadTransactions({
-      platforms: selPlatforms, types: selTypes, searchText: search || undefined,
-      dateFrom: dateFrom ? dateFrom.getTime() : undefined,
-      dateTo:   dateTo   ? dateTo.getTime()   : undefined,
-      currency: selCurrency ?? undefined,
-      tag:      selTag ?? undefined,
-    });
+    loadTransactions(buildFilter());
   }
 
   function resetFilters() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setSelPlatforms([]); setSelTypes([]); setDateFrom(null); setDateTo(null);
+    setSelPlatforms([]); setSelTypes([]); setSelAccountId(null);
+    setDateFrom(null); setDateTo(null);
     setSelCurrency(null); setSelTag(null);
   }
 
   const activeFilters = selPlatforms.length + selTypes.length
+    + (selAccountId ? 1 : 0)
     + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selTag ? 1 : 0);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadAccounts();
+    loadTransactions(buildFilter());
+    setRefreshing(false);
+  }, [buildFilter]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
@@ -871,6 +622,9 @@ export function TransactionsScreen() {
         setSelPlatforms={setSelPlatforms}
         selTypes={selTypes}
         setSelTypes={setSelTypes}
+        selAccountId={selAccountId}
+        setSelAccountId={setSelAccountId}
+        accounts={accounts}
         dateFrom={dateFrom}
         dateTo={dateTo}
         setDateFrom={setDateFrom}
@@ -913,13 +667,14 @@ export function TransactionsScreen() {
           <FlatList
             data={displayItems}
             keyExtractor={(item) => item.kind === 'sep' ? item.key : item.data.id}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
             renderItem={({ item }) => {
               if (item.kind === 'sep') return <DateSeparator label={item.label} />;
               const acc  = accountMap.get(item.data.accountId);
               const col  = acc?.color ?? theme.accent;
               const name = acc ? (acc.displayName ?? acc.name) : item.data.platform;
               return (
-                <TxItem
+                <TransactionListItem
                   item={item.data}
                   tagLabels={tagLabels}
                   accountColor={col}
@@ -943,6 +698,9 @@ export function TransactionsScreen() {
         setSelPlatforms={setSelPlatforms}
         selTypes={selTypes}
         setSelTypes={setSelTypes}
+        selAccountId={selAccountId}
+        setSelAccountId={setSelAccountId}
+        accounts={accounts}
         dateFrom={dateFrom}
         dateTo={dateTo}
         setDateFrom={setDateFrom}
@@ -990,21 +748,5 @@ const styles = StyleSheet.create({
   },
   filterBadgeText: { fontSize: 9, fontWeight: '800', color: '#000' },
   countText: { fontSize: 12, marginLeft: 16, marginBottom: 6 },
-  txItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1,
-  },
-  txColorBar:  { width: 3, borderRadius: 2, alignSelf: 'stretch', marginRight: 10, minHeight: 36 },
-  txLeft:      { flex: 1, marginRight: 8 },
-  txDesc:      { fontSize: 14, marginBottom: 4, fontWeight: '500' },
-  txMeta:      { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  txPlatform:  { fontSize: 11, fontWeight: '600' },
-  txDot:       { fontSize: 11 },
-  txDate:      { fontSize: 11 },
-  txTag:       { fontSize: 11, fontWeight: '500' },
-  txFee:       { fontSize: 11 },
-  txAmountCol: { alignItems: 'flex-end', paddingRight: 4 },
-  txAmount:    { fontSize: 15, fontWeight: '700', textAlign: 'right' },
-  txCurrency:  { fontSize: 11, fontWeight: '400' },
   emptyText:   { textAlign: 'center', paddingVertical: 40 },
 });

@@ -16,6 +16,7 @@ import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
 import { autoDetectTag } from '../utils/tags';
+import { autoDetectCategory, categoryFromZenType } from '../utils/categories';
 
 const MONTH_MAP: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -107,6 +108,9 @@ export function parseZenCsv(
     const tag = self
       ? ('self_transfer' as const)
       : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
+    const category = autoDetectCategory(
+      undefined, desc, tag, categoryFromZenType(txType), ownIbans,
+    );
 
     const amount = Math.abs(settlementAmt);
     const txCurrency = settlementCurrency?.trim() || currency;
@@ -125,6 +129,7 @@ export function parseZenCsv(
       feeAmount:       feeAmt,
       description:     desc || undefined,
       tag:             tag ?? undefined,
+      category,
       transactionDate: date,
       importedAt:      Date.now(),
       rawPayload:      JSON.stringify(row),

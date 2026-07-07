@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
-  ScrollView, TextInput, KeyboardAvoidingView, Platform,
-  useWindowDimensions, Keyboard,
+  ScrollView, TextInput, Platform, useWindowDimensions, Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -31,8 +30,8 @@ function firstWeekdayOfMonth(year: number, month: number): number {
 type Step = 'year' | 'month' | 'day';
 
 const CURRENT_YEAR = new Date().getFullYear();
-// Years descending from current year to 1900
 const YEARS = Array.from({ length: CURRENT_YEAR - 1900 + 1 }, (_, i) => CURRENT_YEAR - i);
+const MONTH_ITEM_H = 52;
 
 export function DatePickerModal({ visible, value, onClose, onConfirm, title, minDate, maxDate }: Props) {
   const { theme } = useTheme();
@@ -46,6 +45,7 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
   const [selDay,    setSelDay]    = useState(now.getDate());
   const [inputMode, setInputMode] = useState(false);
   const [inputVal,  setInputVal]  = useState('');
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   const yearScrollRef  = useRef<ScrollView>(null);
   const monthScrollRef = useRef<ScrollView>(null);
@@ -59,25 +59,34 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
       setSelDay(d.getDate());
       setInputMode(false);
       setInputVal('');
+      setKeyboardInset(0);
     }
   }, [visible]);
 
-  // Auto-scroll to selected year when scroll mode activates
+  useEffect(() => {
+    if (!visible) return;
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const subShow = Keyboard.addListener(showEvt, (e) => setKeyboardInset(e.endCoordinates.height));
+    const subHide = Keyboard.addListener(hideEvt, () => setKeyboardInset(0));
+    return () => { subShow.remove(); subHide.remove(); };
+  }, [visible]);
+
   useEffect(() => {
     if (step === 'year' && !inputMode && yearScrollRef.current) {
       const idx = YEARS.findIndex((y) => y === selYear);
       if (idx >= 0) {
         setTimeout(() => {
-          yearScrollRef.current?.scrollTo({ y: idx * 52, animated: false });
+          yearScrollRef.current?.scrollTo({ y: idx * MONTH_ITEM_H, animated: false });
         }, 50);
       }
     }
     if (step === 'month' && !inputMode && monthScrollRef.current) {
       setTimeout(() => {
-        monthScrollRef.current?.scrollTo({ y: selMonth * 52, animated: false });
+        monthScrollRef.current?.scrollTo({ y: selMonth * MONTH_ITEM_H, animated: false });
       }, 50);
     }
-  }, [step, inputMode]);
+  }, [step, inputMode, visible, selMonth]);
 
   function goNextStep(from: Step) {
     setInputMode(false);
@@ -114,9 +123,10 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
         goNextStep('year');
       }
     } else if (step === 'month') {
-      const m = parseInt(val, 10);
-      if (!isNaN(m) && m >= 1 && m <= 12) {
-        setSelMonth(m - 1);
+      let m = parseInt(val, 10);
+      if (!isNaN(m)) {
+        m = ((m - 1) % 12 + 12) % 12;
+        setSelMonth(m);
         setInputMode(false);
         setInputVal('');
         goNextStep('month');
@@ -132,10 +142,6 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
     }
   }
 
-  function cycleMonth(dir: 1 | -1) {
-    setSelMonth((prev) => (prev + dir + 12) % 12);
-  }
-
   const totalDays   = daysInMonth(selYear, selMonth);
   const firstOffset = firstWeekdayOfMonth(selYear, selMonth);
   const cells: (number | null)[] = Array.from({ length: firstOffset + totalDays }, (_, i) => {
@@ -146,26 +152,28 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
 
   const s = makeStyles(theme, SCREEN_H);
 
+  const contentMinH = SCREEN_H * 0.30;
+
   const inputPlaceholder = step === 'year' ? String(CURRENT_YEAR)
     : step === 'month' ? '1–12'
     : `1–${daysInMonth(selYear, selMonth)}`;
 
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
-      <KeyboardAvoidingView
-        style={s.overlay}
-        behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 8}
-      >
+      <View style={s.overlay}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose} />
 
-        <View style={s.sheet}>
-          {/* Header */}
+        <View style={[
+          s.sheet,
+          keyboardInset > 0 && {
+            paddingBottom: Math.max(0, keyboardInset - (Platform.OS === 'android' ? 24 : 8)),
+          },
+        ]}>
           <View style={s.header}>
             <TouchableOpacity onPress={onClose} style={s.closeBtn} activeOpacity={0.75}>
               <Ionicons name="close" size={20} color={theme.subtext} />
             </TouchableOpacity>
-            <Text style={s.headerTitle}>{title ?? 'Оберіть дату'}</Text>
+            <Text style={s.headerTitle}>{title ?? t.datePickerDefaultTitle}</Text>
             <TouchableOpacity
               style={s.keyboardToggleBtn}
               onPress={() => {
@@ -182,15 +190,14 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
             </TouchableOpacity>
           </View>
 
-          {/* Step indicators */}
           <View style={s.stepsRow}>
             {(['year', 'month', 'day'] as Step[]).map((st, i) => {
               const active = step === st;
               const done   = (step === 'month' && st === 'year') ||
                              (step === 'day'   && (st === 'year' || st === 'month'));
               const label  = st === 'year'  ? String(selYear)
-                           : st === 'month' ? `${String(selMonth + 1).padStart(2, '0')}`
-                           : String(selDay).padStart(2, '0');
+                           : st === 'month' ? String(selMonth + 1)
+                           : String(selDay);
               return (
                 <React.Fragment key={st}>
                   {i > 0 && <View style={[s.stepSep, (done || active) ? { backgroundColor: theme.accent } : {}]} />}
@@ -206,7 +213,6 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
             })}
           </View>
 
-          {/* Keyboard input mode */}
           {inputMode && (
             <View style={s.keyboardInputWrap}>
               <TextInput
@@ -230,12 +236,16 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
             </View>
           )}
 
-          {/* ── YEAR STEP ── */}
-          {step === 'year' && !inputMode && (
-            <View style={s.stepContent}>
+          <View style={[s.bodyArea, { minHeight: contentMinH }]}>
+            {inputMode && step !== 'day' ? (
+              <View style={{ minHeight: contentMinH }} />
+            ) : null}
+
+            {step === 'year' && !inputMode && (
               <ScrollView
                 ref={yearScrollRef}
                 style={s.listScroll}
+                contentContainerStyle={s.listScrollContent}
                 showsVerticalScrollIndicator={false}
               >
                 {YEARS.map((y) => (
@@ -252,95 +262,82 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
-          )}
+            )}
 
-          {/* ── MONTH STEP ── */}
-          {step === 'month' && !inputMode && (
-            <View style={s.stepContent}>
-              {/* Cyclic prev/next */}
-              <TouchableOpacity
-                style={[s.cyclicBtn, { borderColor: theme.border }]}
-                onPress={() => cycleMonth(-1)}
-                activeOpacity={0.75}
+            {step === 'month' && !inputMode && (
+              <ScrollView
+                ref={monthScrollRef}
+                style={s.listScroll}
+                contentContainerStyle={s.listScrollContent}
+                showsVerticalScrollIndicator={false}
               >
-                <Ionicons name="chevron-up" size={18} color={theme.subtext} />
-                <Text style={[s.cyclicBtnText, { color: theme.subtext }]}>
-                  {String(((selMonth - 1 + 12) % 12) + 1).padStart(2, '0')} — {t.months[(selMonth - 1 + 12) % 12]}
-                </Text>
-              </TouchableOpacity>
-
-              <ScrollView ref={monthScrollRef} style={s.listScroll} showsVerticalScrollIndicator={false}>
-                {t.months.map((name, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[s.listItem, idx === selMonth && { backgroundColor: theme.accent + '22' }]}
-                    onPress={() => { setSelMonth(idx); goNextStep('month'); }}
-                    activeOpacity={0.75}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <View style={[s.monthNumBadge, { backgroundColor: idx === selMonth ? theme.accent : theme.cardAlt }]}>
-                        <Text style={[s.monthNum, { color: idx === selMonth ? '#fff' : theme.subtext }]}>
-                          {String(idx + 1).padStart(2, '0')}
-                        </Text>
-                      </View>
-                      <Text style={[s.listItemText, idx === selMonth && { color: theme.accent, fontWeight: '700' }]}>
-                        {name}
-                      </Text>
-                    </View>
-                    {idx === selMonth && <Ionicons name="checkmark" size={16} color={theme.accent} />}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <TouchableOpacity
-                style={[s.cyclicBtn, { borderColor: theme.border }]}
-                onPress={() => cycleMonth(1)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.cyclicBtnText, { color: theme.subtext }]}>
-                  {String(((selMonth + 1) % 12) + 1).padStart(2, '0')} — {t.months[(selMonth + 1) % 12]}
-                </Text>
-                <Ionicons name="chevron-down" size={18} color={theme.subtext} />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ── DAY STEP (calendar grid) ── */}
-          {step === 'day' && !inputMode && (
-            <View style={s.stepContent}>
-              <View style={s.calHeader}>
-                {t.weekdays.map((wd) => (
-                  <Text key={wd} style={s.calWd}>{wd}</Text>
-                ))}
-              </View>
-              <View style={s.calGrid}>
-                {cells.map((day, i) => {
-                  if (day === null) return <View key={`e-${i}`} style={s.calCell} />;
-                  const isSel = day === selDay;
+                {t.months.map((name, monthIdx) => {
+                  const selected = monthIdx === selMonth;
                   return (
                     <TouchableOpacity
-                      key={day}
-                      style={[s.calCell, isSel && { backgroundColor: theme.accent, borderRadius: 20 }]}
-                      onPress={() => setSelDay(day)}
+                      key={name}
+                      style={[s.listItem, selected && { backgroundColor: theme.accent + '22' }]}
+                      onPress={() => { setSelMonth(monthIdx); goNextStep('month'); }}
                       activeOpacity={0.75}
                     >
-                      <Text style={[s.calDay, isSel && { color: '#fff', fontWeight: '700' }]}>{day}</Text>
+                      <View style={s.listItemCenter}>
+                        <View style={[s.monthNumBadge, { backgroundColor: selected ? theme.accent : theme.cardAlt }]}>
+                          <Text style={[s.monthNum, { color: selected ? '#fff' : theme.subtext }]}>
+                            {monthIdx + 1}
+                          </Text>
+                        </View>
+                        <Text style={[s.listItemText, selected && { color: theme.accent, fontWeight: '700' }]}>
+                          {name}
+                        </Text>
+                        {selected && <Ionicons name="checkmark" size={16} color={theme.accent} />}
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            </View>
-          )}
+              </ScrollView>
+            )}
 
-          {/* Save button */}
+            {step === 'day' && !inputMode && (
+              <View style={s.dayContent}>
+                <View style={s.calHeader}>
+                  {t.weekdays.map((wd) => (
+                    <Text key={wd} style={s.calWd}>{wd}</Text>
+                  ))}
+                </View>
+                <View style={s.calGrid}>
+                  {cells.map((day, i) => {
+                    if (day === null) return <View key={`e-${i}`} style={s.calCell} />;
+                    const isSel = day === selDay;
+                    return (
+                      <TouchableOpacity
+                        key={`d-${i}-${day}`}
+                        style={s.calCell}
+                        onPress={() => setSelDay(day)}
+                        activeOpacity={0.75}
+                      >
+                        <View style={[
+                          s.calDayCircle,
+                          isSel
+                            ? { backgroundColor: theme.accent, borderColor: theme.accent }
+                            : { borderColor: theme.border, borderWidth: 1 },
+                        ]}>
+                          <Text style={[s.calDay, isSel && { color: '#fff', fontWeight: '700' }]}>{day}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </View>
+
           <View style={s.footer}>
             <TouchableOpacity style={[s.confirmBtn, { backgroundColor: theme.accent }]} onPress={handleConfirm} activeOpacity={0.75}>
               <Text style={s.confirmBtnText}>{t.save}</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -360,8 +357,7 @@ function makeStyles(theme: AppTheme, screenH: number) {
       backgroundColor: theme.card,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      maxHeight: screenH * 0.72,
-      minHeight: screenH * 0.50,
+      height: screenH * 0.72,
       overflow: 'hidden',
       borderTopWidth: 1,
       borderTopColor: theme.border,
@@ -374,9 +370,9 @@ function makeStyles(theme: AppTheme, screenH: number) {
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
-    closeBtn: { padding: 4 },
-    keyboardToggleBtn: { padding: 4 },
-    headerTitle: { color: theme.text, fontSize: 16, fontWeight: '700' },
+    closeBtn: { padding: 4, width: 28 },
+    keyboardToggleBtn: { padding: 4, width: 28, alignItems: 'flex-end' },
+    headerTitle: { color: theme.text, fontSize: 16, fontWeight: '700', flex: 1, textAlign: 'center' },
 
     stepsRow: {
       flexDirection: 'row',
@@ -386,14 +382,24 @@ function makeStyles(theme: AppTheme, screenH: number) {
       paddingHorizontal: 16,
     },
     stepBubble: {
+      minWidth: 52,
+      height: 34,
       paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 16,
+      borderRadius: 17,
       backgroundColor: theme.cardAlt,
       borderWidth: 1,
       borderColor: theme.border,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    stepLabel: { color: theme.subtext, fontSize: 14, fontWeight: '600' },
+    stepLabel: {
+      color: theme.subtext,
+      fontSize: 14,
+      fontWeight: '600',
+      textAlign: 'center',
+      lineHeight: 18,
+      ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
+    },
     stepSep: {
       width: 20,
       height: 1,
@@ -426,40 +432,45 @@ function makeStyles(theme: AppTheme, screenH: number) {
       justifyContent: 'center',
     },
 
-    stepContent: { paddingHorizontal: 16, flex: 1 },
+    bodyArea: { flex: 1, overflow: 'hidden' },
+    dayContent: { paddingHorizontal: 16, flex: 1 },
 
-    listScroll: { maxHeight: screenH * 0.30 },
+    listScroll: { flex: 1 },
+    listScrollContent: { alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
     listItem: {
+      width: '100%',
+      maxWidth: 320,
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      justifyContent: 'center',
       alignItems: 'center',
       paddingVertical: 11,
       paddingHorizontal: 8,
       borderRadius: 8,
       marginBottom: 2,
+      height: 50,
     },
-    listItemText: { color: theme.text, fontSize: 15 },
+    listItemCenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    listItemText: { color: theme.text, fontSize: 15, textAlign: 'center' },
 
     monthNumBadge: {
       width: 28,
       height: 28,
-      borderRadius: 8,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    monthNum: { fontSize: 12, fontWeight: '700' },
-
-    cyclicBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 8,
-      marginVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
+    monthNum: {
+      fontSize: 12,
+      fontWeight: '700',
+      textAlign: 'center',
+      lineHeight: 14,
+      ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
     },
-    cyclicBtnText: { fontSize: 13 },
 
     calHeader: {
       flexDirection: 'row',
@@ -478,14 +489,25 @@ function makeStyles(theme: AppTheme, screenH: number) {
       flexWrap: 'wrap',
     },
     calCell: {
-      width: `${100 / 7}%` as any,
-      aspectRatio: 1,
+      width: '14.28%',
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    calDayCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       alignItems: 'center',
       justifyContent: 'center',
     },
     calDay: {
       color: theme.text,
-      fontSize: 14,
+      fontSize: 13,
+      textAlign: 'center',
+      width: 34,
+      lineHeight: 16,
+      ...(Platform.OS === 'android' ? { includeFontPadding: false, textAlignVertical: 'center' as const } : {}),
     },
 
     footer: {

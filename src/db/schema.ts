@@ -39,6 +39,54 @@ export const SCHEMA_V6 = `
   CREATE INDEX IF NOT EXISTS idx_tx_tag ON transactions(tag);
 `;
 
+export const SCHEMA_V7 = `
+  CREATE TABLE transactions_new (
+    id               TEXT PRIMARY KEY,
+    account_id       TEXT NOT NULL REFERENCES accounts(id),
+    platform         TEXT NOT NULL CHECK (platform IN ('monobank','ibkr','privatbank','zen','manual')),
+    external_id      TEXT,
+    type             TEXT NOT NULL CHECK (type IN ('income','expense','transfer','fee')),
+    amount           REAL NOT NULL,
+    currency         TEXT NOT NULL,
+    amount_base      REAL,
+    exchange_rate    REAL,
+    fee_amount       REAL NOT NULL DEFAULT 0,
+    fee_currency     TEXT,
+    fee_type         TEXT,
+    description      TEXT,
+    category         TEXT,
+    tag              TEXT,
+    mcc              INTEGER,
+    counterparty     TEXT,
+    direction_from   TEXT,
+    direction_to     TEXT,
+    transaction_date INTEGER NOT NULL,
+    imported_at      INTEGER NOT NULL,
+    raw_payload      TEXT
+  );
+
+  INSERT INTO transactions_new
+    (id, account_id, platform, external_id, type, amount, currency,
+     amount_base, exchange_rate, fee_amount, fee_currency, fee_type,
+     description, category, tag, mcc, counterparty, direction_from, direction_to,
+     transaction_date, imported_at, raw_payload)
+  SELECT
+    id, account_id, platform, external_id, type, amount, currency,
+    amount_base, exchange_rate, fee_amount, fee_currency, fee_type,
+    description, category, tag, mcc, counterparty, direction_from, direction_to,
+    transaction_date, imported_at, raw_payload
+  FROM transactions;
+
+  DROP TABLE transactions;
+  ALTER TABLE transactions_new RENAME TO transactions;
+
+  CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions(account_id, transaction_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_tx_platform     ON transactions(platform);
+  CREATE INDEX IF NOT EXISTS idx_tx_type         ON transactions(type);
+  CREATE INDEX IF NOT EXISTS idx_tx_date         ON transactions(transaction_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_tx_tag          ON transactions(tag);
+`;
+
 export const SCHEMA_V1 = `
   -- Версіювання схеми (для майбутніх міграцій)
   CREATE TABLE IF NOT EXISTS _schema_version (

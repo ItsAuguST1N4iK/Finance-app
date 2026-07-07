@@ -11,7 +11,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { tokenStore, TOKEN_KEYS } from '../security/tokenStore';
 import { useAccountsStore } from '../store/accountsSlice';
 import { useTransactionsStore } from '../store/transactionsSlice';
-import { useAnalyticsStore } from '../store/analyticsSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { THEME_LABELS, ThemeKey, ACCENT_PRESETS, AppTheme } from '../theme';
@@ -24,12 +23,16 @@ import {
   SyncProgress,
 } from '../api/monobank';
 import { parseZenCsv }          from '../api/zen';
-import { parseMonobankCsv }     from '../api/monobank-csv';
+import { parseMonobankCsv, type MonoCsvCurrencyMode } from '../api/monobank-csv';
 import { parsePrivatbankXlsx, parsePrivatbankCsv } from '../api/privatbank';
-import type { Account, Platform } from '../types';
+import type { Account, Platform, UnifiedTransaction } from '../types';
 import { getDatabase } from '../db/migrations';
+import { refreshAppData } from '../utils/refreshAppData';
+import { analyzeImportDuplicates, reassignTransactionId } from '../utils/importTransactions';
+import { CardPreview } from '../components/CardPreview';
 import { currencySymbol } from '../utils/currency';
 import { retagFromRawPayload } from '../utils/tags';
+import { autoDetectCategory } from '../utils/categories';
 
 
 const AVAILABLE_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'PLN', 'CZK', 'CAD', 'AUD', 'JPY'];
@@ -155,9 +158,9 @@ const bnS = StyleSheet.create({
 // ─── Token Block ──────────────────────────────────────
 
 function TokenBlock({
-  title, hint, tokenKey, instructions, onSaved,
+  title, tokenKey, instructions, onSaved,
 }: {
-  title: string; hint: string; tokenKey: string;
+  title: string; tokenKey: string;
   instructions: string; onSaved: () => void;
 }) {
   const { theme } = useTheme();
@@ -208,7 +211,6 @@ function TokenBlock({
           </View>
         )}
       </View>
-      <Text style={s.tokenHint}>{hint}</Text>
       <TouchableOpacity style={s.instrToggle} onPress={() => setShowInstr((v) => !v)} activeOpacity={0.75}>
         <Ionicons name={showInstr ? 'chevron-up' : 'information-circle-outline'} size={14} color={theme.accent} />
         <Text style={[s.instrToggleText, { color: theme.accent }]}>
@@ -260,19 +262,27 @@ function TokenBlock({
 // ─── CSV Import Block ─────────────────────────────────
 
 function CsvImportBlock({
-  title, hint, instructions, onImport,
+  title, instructions, onImport,
   accounts = [], accountPlatform, requireAccountPick = false,
+  showCurrencyMode = false,
 }: {
-  title: string; hint: string; instructions: string;
+  title: string; instructions: string;
   accounts?: Account[];
   accountPlatform?: Platform;
   requireAccountPick?: boolean;
-  onImport: (uri: string, name: string, accountId: string) => Promise<void>;
+  showCurrencyMode?: boolean;
+  onImport: (
+    uri: string,
+    name: string,
+    accountId: string,
+    options?: { currencyMode: MonoCsvCurrencyMode },
+  ) => Promise<void>;
 }) {
   const { theme }  = useTheme();
   const { t }      = useLanguage();
   const [loading, setLoading] = useState(false);
   const [showInstr, setShowInstr] = useState(false);
+  const [currencyMode, setCurrencyMode] = useState<MonoCsvCurrencyMode>('account');
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   const eligibleAccounts = accounts.filter((a) =>
@@ -307,7 +317,7 @@ function CsvImportBlock({
       if (result.canceled || !result.assets?.length) return;
       const { uri, name } = result.assets[0];
       setLoading(true);
-      await onImport(uri, name ?? '', accountId);
+      await onImport(uri, name ?? '', accountId, showCurrencyMode ? { currencyMode } : undefined);
     } catch (e) {
       console.error('[CsvImportBlock]', e);
     } finally {
@@ -318,7 +328,6 @@ function CsvImportBlock({
   return (
     <View style={[s.tokenBlock, { marginBottom: 12 }]}>
       <Text style={s.tokenTitle}>{title}</Text>
-      <Text style={s.tokenHint}>{hint}</Text>
 
       {requireAccountPick && (
         <>
@@ -348,6 +357,36 @@ function CsvImportBlock({
               })}
             </View>
           )}
+        </>
+      )}
+
+      {showCurrencyMode && (
+        <>
+          <GroupLabel label={t.importCurrencyLabel} />
+          <View style={[s.currenciesWrap, { marginBottom: 12 }]}>
+            {([
+              { mode: 'account' as const, label: t.importCurrencyAccount.replace('{currency}', eligibleAccounts.find((a) => a.id === selectedAccountId)?.currency ?? '—') },
+              { mode: 'operation' as const, label: t.importCurrencyOperation },
+            ]).map(({ mode, label }) => {
+              const active = currencyMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[s.currencyChip, {
+                    backgroundColor: active ? theme.accent + '22' : theme.cardAlt,
+                    borderColor: active ? theme.accent : theme.border,
+                  }]}
+                  onPress={() => setCurrencyMode(mode)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[s.currencyChipText, { color: active ? theme.accent : theme.subtext }]}>
+                    {label}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={12} color={theme.accent} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </>
       )}
 
@@ -437,13 +476,7 @@ function SettingsCardEditModal({
                 <Ionicons name="close" size={22} color={theme.subtext} />
               </TouchableOpacity>
             </View>
-            <View style={{ borderRadius: 14, padding: 16, marginBottom: 16, minHeight: 90, justifyContent: 'space-between', backgroundColor: color }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '600' }}>{account.platform.toUpperCase()}</Text>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>
-                {account.balance != null ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)} ${account.currency}` : '—'}
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4 }}>{name || account.name}</Text>
-            </View>
+            <CardPreview account={account} name={name} color={color} />
             <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>{t.dashCardName}</Text>
             <TextInput
               style={{ borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15, backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 12 }}
@@ -483,6 +516,42 @@ function SettingsCardEditModal({
   );
 }
 
+// ─── Import with duplicate confirmation ─────────────
+
+function confirmImportTransactions(
+  label: string,
+  transactions: UnifiedTransaction[],
+  upsert: (txs: UnifiedTransaction[]) => { inserted: number; total: number },
+  showResult: (lbl: string, result: { inserted: number }) => void,
+  show: ReturnType<typeof useAppAlert>['show'],
+  t: ReturnType<typeof useLanguage>['t'],
+) {
+  const { duplicates, unique } = analyzeImportDuplicates(transactions);
+  if (duplicates.length === 0) {
+    showResult(label, upsert(transactions));
+    return;
+  }
+  const msg = t.importDuplicatesMessage
+    .replace('{dup}', String(duplicates.length))
+    .replace('{total}', String(transactions.length));
+  show(t.importDuplicatesTitle, msg, [
+    {
+      text: t.importRejectDuplicates,
+      style: 'cancel',
+      onPress: () => {
+        if (unique.length > 0) showResult(label, upsert(unique));
+      },
+    },
+    {
+      text: t.importAddAnyway,
+      onPress: () => {
+        const extra = duplicates.map(reassignTransactionId);
+        showResult(label, upsert([...unique, ...extra]));
+      },
+    },
+  ]);
+}
+
 // ─── Main Screen ──────────────────────────────────────
 
 export function SettingsScreen() {
@@ -490,7 +559,6 @@ export function SettingsScreen() {
   const { language, setLanguage, t } = useLanguage();
   const { accounts, loadAccounts, addAccount, updateBalance, updateDisplay, deactivateAccount } = useAccountsStore();
   const { upsertTransactions } = useTransactionsStore();
-  const { loadHomeCurrency } = useAnalyticsStore();
   const { show, element: alertEl } = useAppAlert();
 
   const [syncing,        setSyncing]        = useState(false);
@@ -535,7 +603,7 @@ export function SettingsScreen() {
         [code, code]
       );
     } catch {}
-    loadHomeCurrency();
+    void refreshAppData('all');
   }
 
   function handleDeactivate(id: string) {
@@ -550,13 +618,14 @@ export function SettingsScreen() {
       { text: t.cancel, style: 'cancel' },
       {
         text: t.delete, style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
           try {
             const db = getDatabase();
             db.runSync('DELETE FROM transactions');
-            show('Готово', 'Всі транзакції видалено.');
+            await refreshAppData('all');
+            show(t.done, t.settingsDataDeleted);
           } catch (e) {
-            show('Помилка', String((e as Error)?.message ?? e));
+            show(t.error, String((e as Error)?.message ?? e));
           }
         },
       },
@@ -585,9 +654,10 @@ export function SettingsScreen() {
             setAccent('#10b981');
             setHomeCurrencyState('UAH');
             setPrefCurrencies(['USD','EUR','GBP']);
-            show('Готово', 'Налаштування скинуто до заводських.');
+            await refreshAppData('all');
+            show(t.done, t.settingsResetDone);
           } catch (e) {
-            show('Помилка', String((e as Error)?.message ?? e));
+            show(t.error, String((e as Error)?.message ?? e));
           }
         },
       },
@@ -600,7 +670,7 @@ export function SettingsScreen() {
       const db = getDatabase();
       const rows = db.getAllSync<{
         id: string; mcc: number | null; description: string | null; raw_payload: string | null;
-      }>(`SELECT id, mcc, description, raw_payload FROM transactions WHERE raw_payload IS NOT NULL`);
+      }>(`SELECT id, mcc, description, raw_payload FROM transactions`);
       const ownIbans = accounts.filter((a) => a.iban).map((a) => a.iban!);
       let updated = 0;
       db.withTransactionSync(() => {
@@ -608,15 +678,32 @@ export function SettingsScreen() {
           const tag = row.raw_payload
             ? retagFromRawPayload(row.raw_payload, row.mcc ?? undefined, row.description ?? undefined, ownIbans, accounts)
             : undefined;
-          if (tag) {
-            db.runSync('UPDATE transactions SET tag = ? WHERE id = ?', [tag, row.id]);
-            updated++;
+          let bankCategory: string | undefined;
+          if (row.raw_payload) {
+            try {
+              const raw = JSON.parse(row.raw_payload) as { bankCat?: string };
+              bankCategory = raw.bankCat?.trim() || undefined;
+            } catch {}
           }
+          const category = autoDetectCategory(
+            row.mcc ?? undefined,
+            row.description ?? undefined,
+            tag,
+            bankCategory,
+            ownIbans,
+          );
+          db.runSync(
+            'UPDATE transactions SET tag = ?, category = ? WHERE id = ?',
+            [tag ?? null, category, row.id],
+          );
+          updated++;
         }
       });
-      show('Готово', `Визначено теги для ${updated} транзакцій.`);
+      useTransactionsStore.getState().loadRecentTransactions();
+      await refreshAppData('all');
+      show(t.done, t.settingsRetagSuccess.replace('{count}', String(updated)));
     } catch (e) {
-      show('Помилка', String((e as Error)?.message ?? e));
+      show(t.error, String((e as Error)?.message ?? e));
     } finally {
       setReTagging(false);
     }
@@ -624,10 +711,10 @@ export function SettingsScreen() {
 
   const syncMonobank = useCallback(async () => {
     const token = await tokenStore.get(TOKEN_KEYS.monobank);
-    if (!token) { show('Токен відсутній', 'Спочатку збережіть Monobank X-Token.'); return; }
+    if (!token) { show(t.settingsTokenMissing, t.settingsTokenMissingHint); return; }
 
     setSyncing(true);
-    setProgress({ step: 'Підключення до Monobank…', current: 0, total: 1 });
+    setProgress({ step: t.settingsMonoConnecting, current: 0, total: 1 });
 
     try {
       const { accounts: monoAccounts } = await fetchMonoClientInfo(token);
@@ -645,6 +732,7 @@ export function SettingsScreen() {
       }
       const total = monoAccounts.length * windows.length;
       let done = 0;
+      const allTxs: UnifiedTransaction[] = [];
 
       for (const { raw, account } of monoAccounts) {
         const existingAcc = accounts.find((a) => a.externalId === raw.id);
@@ -671,11 +759,11 @@ export function SettingsScreen() {
             retryWindow = false;
             try {
               const stmts = await fetchMonoStatement(token, raw.id, win.from, win.to);
-            const txs   = stmts.map((s) => monoStatementToTx(s, internalId!, ownIbans, accounts));
-            if (txs.length > 0) upsertTransactions(txs);
+              const txs   = stmts.map((s) => monoStatementToTx(s, internalId!, ownIbans, accounts));
+              if (txs.length > 0) allTxs.push(...txs);
             } catch (e: unknown) {
               if ((e as Error)?.message === 'rate_limit') {
-                setProgress({ step: 'Ліміт API — чекаємо 65 с…', current: done, total });
+                setProgress({ step: t.settingsMonoRateLimit, current: done, total });
                 await new Promise((r) => setTimeout(r, 65_000));
                 retryWindow = true;
                 setProgress({
@@ -689,15 +777,20 @@ export function SettingsScreen() {
           } while (retryWindow);
 
           if (done < total) {
-            setProgress({ step: 'Пауза між запитами…', current: done, total });
+            setProgress({ step: t.settingsMonoPause, current: done, total });
             await new Promise((r) => setTimeout(r, 62_000));
           }
         }
       }
-      setProgress({ step: 'Синхронізацію завершено!', current: total, total });
-      show('Готово', 'Транзакції з Monobank успішно завантажено.');
+      setProgress({ step: t.settingsMonoSyncDone, current: total, total });
+      if (allTxs.length > 0) {
+        confirmImportTransactions('Monobank', allTxs, upsertTransactions, showImportResult, show, t);
+      } else {
+        await refreshAppData('analytics');
+        show(t.done, t.settingsMonoSyncNoNew);
+      }
     } catch (e: unknown) {
-      show('Помилка синхронізації', String((e as Error)?.message ?? e));
+      show(t.settingsSyncError, String((e as Error)?.message ?? e));
     } finally {
       setSyncing(false);
       setTimeout(() => setProgress(null), 3000);
@@ -707,17 +800,13 @@ export function SettingsScreen() {
 
   // ─── CSV Import handlers ─────────────────────────
 
-  function showImportResult(label: string, result: { inserted: number; skipped: number }) {
+  function showImportResult(label: string, result: { inserted: number }) {
     if (result.inserted > 0) {
-      let msg = t.importCsvSuccess.replace('{count}', String(result.inserted));
-      if (result.skipped > 0) {
-        msg += `\n${t.importCsvSkipped.replace('{count}', String(result.skipped))}`;
-      }
-      show(`${label}: Імпортовано`, msg);
-    } else if (result.skipped > 0) {
-      show(label, t.importCsvSkipped.replace('{count}', String(result.skipped)));
+      const msg = t.importCsvSuccess.replace('{count}', String(result.inserted));
+      show(t.importCsvImportedTitle.replace('{label}', label), msg);
+      void refreshAppData('analytics');
     } else {
-      show(label, 'Не знайдено транзакцій у файлі.');
+      show(label, t.importCsvNoTx);
     }
   }
 
@@ -728,27 +817,35 @@ export function SettingsScreen() {
 
       const { transactions } = parseZenCsv(content, accountId, ownIbans, accounts);
       if (transactions.length > 0) {
-        const result = upsertTransactions(transactions);
-        showImportResult('ZEN', result);
+        confirmImportTransactions('ZEN', transactions, upsertTransactions, showImportResult, show, t);
       } else {
-        show('ZEN', 'Не знайдено транзакцій у файлі.');
+        show('ZEN', t.importCsvNoTx);
       }
     } catch (e) {
       show(t.importCsvError, String((e as Error)?.message ?? e));
     }
   }
 
-  async function handleMonoCsvImport(uri: string, _name: string, accountId: string) {
+  async function handleMonoCsvImport(
+    uri: string,
+    _name: string,
+    accountId: string,
+    options?: { currencyMode: MonoCsvCurrencyMode },
+  ) {
     try {
       const content = await FileSystem.readAsStringAsync(uri);
       const ownIbans = accounts.filter((a) => a.iban).map((a) => a.iban!);
+      const acc = accounts.find((a) => a.id === accountId);
+      const currencyMode = options?.currencyMode ?? 'account';
 
-      const { transactions } = parseMonobankCsv(content, accountId, ownIbans, accounts);
+      const { transactions } = parseMonobankCsv(content, accountId, ownIbans, accounts, {
+        currencyMode,
+        accountCurrency: acc?.currency ?? 'UAH',
+      });
       if (transactions.length > 0) {
-        const result = upsertTransactions(transactions);
-        showImportResult('Monobank CSV', result);
+        confirmImportTransactions('Monobank CSV', transactions, upsertTransactions, showImportResult, show, t);
       } else {
-        show('Monobank CSV', 'Не знайдено транзакцій у файлі.');
+        show('Monobank CSV', t.importCsvNoTx);
       }
     } catch (e) {
       show(t.importCsvError, String((e as Error)?.message ?? e));
@@ -774,10 +871,9 @@ export function SettingsScreen() {
       }
 
       if (transactions.length > 0) {
-        const result = upsertTransactions(transactions);
-        showImportResult('PrivatBank', result);
+        confirmImportTransactions('PrivatBank', transactions, upsertTransactions, showImportResult, show, t);
       } else {
-        show('PrivatBank', 'Не знайдено транзакцій у файлі.');
+        show('PrivatBank', t.importCsvNoTx);
       }
     } catch (e) {
       show(t.importCsvError, String((e as Error)?.message ?? e));
@@ -861,7 +957,7 @@ export function SettingsScreen() {
           <GroupLabel label={t.settingsCurrencies} />
           <Text style={[s.hintText, { marginBottom: 10 }]}>{t.settingsCurrenciesHint}</Text>
           <View style={s.currenciesWrap}>
-            {AVAILABLE_CURRENCIES.map((code) => {
+            {(['UAH', ...AVAILABLE_CURRENCIES]).map((code) => {
               const active = prefCurrencies.includes(code);
               return (
                 <TouchableOpacity
@@ -879,47 +975,42 @@ export function SettingsScreen() {
           </View>
         </Section>
 
-        {/* ─── 3. Monobank API ── */}
-        <Section title="Monobank" icon="card-outline" badge="API">
-          {/* API limit note */}
-          <View style={[s.noteBox, { backgroundColor: theme.warning + '15', borderColor: theme.warning + '44', marginBottom: 12 }]}>
-            <Ionicons name="information-circle-outline" size={14} color={theme.warning} />
-            <View style={{ flex: 1 }}>
-              <Text style={[s.noteTitle, { color: theme.warning }]}>{t.settingsMonobankLimit}</Text>
-              <Text style={[s.noteText, { color: theme.subtext }]}>{t.settingsMonobankLimitHint}</Text>
+        {/* ─── 3. Platform connections (API + CSV per platform) ── */}
+        <Section title={t.settingsPlatforms} icon="link-outline">
+          <Text style={[s.hintText, { marginBottom: 14 }]}>{t.settingsPlatformsHint}</Text>
+
+          <PlatformCsvPanel title="Monobank">
+            <View style={[s.noteBox, { backgroundColor: theme.warning + '15', borderColor: theme.warning + '44', marginBottom: 12 }]}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.noteTitle, { color: theme.warning }]}>{t.settingsMonobankLimit}</Text>
+                <Text style={[s.noteText, { color: theme.subtext }]}>{t.settingsMonobankLimitHint}</Text>
+              </View>
             </View>
-          </View>
-
-          {/* API sync */}
-          <GroupLabel label="API — автосинхронізація (90 днів)" />
-          <TouchableOpacity
-            style={[s.syncBtn, syncing && { opacity: 0.6 }]}
-            onPress={syncMonobank}
-            disabled={syncing}
-          >
-            <Ionicons name="sync-outline" size={18} color="#fff" />
-            <Text style={s.syncBtnText}>{syncing ? t.settingsSyncing : t.settingsSyncMono}</Text>
-          </TouchableOpacity>
-          <SyncBanner progress={syncing ? progress : null} />
-          <TokenBlock
-            title="Monobank X-Token"
-            hint="api.monobank.ua → «Для розробників» → Скопіювати токен"
-            tokenKey={TOKEN_KEYS.monobank}
-            instructions={t.settingsMonobankInstructions}
-            onSaved={syncMonobank}
-          />
-        </Section>
-
-        {/* ─── 4. CSV Import (all platforms) ── */}
-        <Section title={t.importCsvSectionTitle} icon="document-text-outline" badge="CSV">
-          <PlatformCsvPanel title="Monobank" defaultExpanded>
+            <GroupLabel label={t.settingsMonoApiSync} />
+            <TouchableOpacity
+              style={[s.syncBtn, syncing && { opacity: 0.6 }]}
+              onPress={syncMonobank}
+              disabled={syncing}
+            >
+              <Ionicons name="sync-outline" size={18} color="#fff" />
+              <Text style={s.syncBtnText}>{syncing ? t.settingsSyncing : t.settingsSyncMono}</Text>
+            </TouchableOpacity>
+            <SyncBanner progress={syncing ? progress : null} />
+            <TokenBlock
+              title="Monobank X-Token"
+              tokenKey={TOKEN_KEYS.monobank}
+              instructions={t.settingsMonobankInstructions}
+              onSaved={syncMonobank}
+            />
+            <GroupLabel label={t.settingsCsvImportLabel} />
             <CsvImportBlock
               title="Monobank CSV"
-              hint="Monobank app → ••• → Виписка → Завантажити CSV"
-              instructions={'1. Відкрий додаток Monobank\n2. На головному екрані натисни "···" (три крапки)\n3. Перейди: Виписка → Завантажити (.csv)\n4. Відправ файл на цей пристрій\n5. Обери картку нижче та натисни "Імпортувати файл"\n\n✅ CSV містить всю доступну історію без обмежень!'}
+              instructions={t.settingsMonoCsvInstructions}
               accounts={accounts}
               accountPlatform="monobank"
               requireAccountPick
+              showCurrencyMode
               onImport={handleMonoCsvImport}
             />
           </PlatformCsvPanel>
@@ -927,7 +1018,6 @@ export function SettingsScreen() {
           <PlatformCsvPanel title="ZEN Money">
             <CsvImportBlock
               title={t.settingsZen}
-              hint={t.settingsZenHint}
               instructions={t.settingsZenInstructions}
               accounts={accounts}
               accountPlatform="zen"
@@ -939,7 +1029,6 @@ export function SettingsScreen() {
           <PlatformCsvPanel title="PrivatBank">
             <CsvImportBlock
               title={t.settingsPrivatbank}
-              hint={t.settingsPrivatbankHint}
               instructions={t.settingsPrivatbankInstructions}
               accounts={accounts}
               accountPlatform="privatbank"
@@ -947,47 +1036,41 @@ export function SettingsScreen() {
               onImport={handlePrivatImport}
             />
           </PlatformCsvPanel>
+
+          <PlatformCsvPanel title="Interactive Brokers (IBKR)">
+            <View style={[s.noteBox, { backgroundColor: theme.accent + '11', borderColor: theme.accent + '33', marginBottom: 12 }]}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.accent} />
+              <Text style={[s.noteText, { color: theme.subtext, flex: 1 }]}>
+                {'IBKR використовує Flex Web Service. Потрібен Flex Token та Query ID.\nПідтримка: активна торгова активність, готівкові транзакції.'}
+              </Text>
+            </View>
+            <TokenBlock
+              title="IBKR Flex Token"
+              tokenKey={TOKEN_KEYS.ibkrFlexToken}
+              instructions={t.settingsIbkrTokenInstructions}
+              onSaved={loadAccounts}
+            />
+            <TokenBlock
+              title="IBKR Query ID"
+              tokenKey={TOKEN_KEYS.ibkrQueryId}
+              instructions={t.settingsIbkrQueryInstructions}
+              onSaved={loadAccounts}
+            />
+          </PlatformCsvPanel>
         </Section>
 
-        {/* ─── 5. IBKR ── */}
-        <Section title="Interactive Brokers (IBKR)" icon="trending-up-outline" badge="API">
-          <View style={[s.noteBox, { backgroundColor: theme.accent + '11', borderColor: theme.accent + '33', marginBottom: 12 }]}>
-            <Ionicons name="information-circle-outline" size={14} color={theme.accent} />
-            <Text style={[s.noteText, { color: theme.subtext, flex: 1 }]}>
-              {'IBKR використовує Flex Web Service. Потрібен Flex Token та Query ID.\nПідтримка: активна торгова активність, готівкові транзакції.'}
-            </Text>
-          </View>
-          <TokenBlock
-            title="IBKR Flex Token"
-            hint="Client Portal → Performance & Reports → Flex Queries → Manage Flex Tokens"
-            tokenKey={TOKEN_KEYS.ibkrFlexToken}
-            instructions={t.settingsIbkrTokenInstructions}
-            onSaved={loadAccounts}
-          />
-          <TokenBlock
-            title="IBKR Query ID"
-            hint="ID Activity Flex Query (число, наприклад: 1234567)"
-            tokenKey={TOKEN_KEYS.ibkrQueryId}
-            instructions={t.settingsIbkrQueryInstructions}
-            onSaved={loadAccounts}
-          />
-        </Section>
-
-        {/* ─── 7. Tags ── */}
-        <Section title={t.tagLabel} icon="pricetag-outline">
+        {/* ─── Cards & Tags ── */}
+        <Section title={t.settingsCardsAndTags} icon="card-outline">
           <Text style={[s.hintText, { marginBottom: 12 }]}>{t.settingsReAutoTagHint}</Text>
           <TouchableOpacity
-            style={[s.syncBtn, reTagging && { opacity: 0.6 }]}
+            style={[s.syncBtn, reTagging && { opacity: 0.6 }, { marginBottom: 16 }]}
             onPress={handleReAutoTag}
             disabled={reTagging}
           >
             <Ionicons name="refresh-outline" size={18} color="#fff" />
-            <Text style={s.syncBtnText}>{reTagging ? 'Визначаємо теги…' : t.settingsReAutoTag}</Text>
+            <Text style={s.syncBtnText}>{reTagging ? t.settingsRetagging : t.settingsReAutoTag}</Text>
           </TouchableOpacity>
-        </Section>
 
-        {/* ─── 8. Card Settings ── */}
-        <Section title={t.settingsCards} icon="card-outline">
           {accounts.filter((a) => a.id !== 'acc_default').length === 0 ? (
             <View style={s.emptyAccounts}>
               <Ionicons name="card-outline" size={28} color={theme.border} />
@@ -1021,7 +1104,7 @@ export function SettingsScreen() {
           )}
         </Section>
 
-        {/* ─── 9. Danger Zone ── */}
+        {/* ─── Danger Zone ── */}
         <Section title={t.settingsDanger} icon="warning-outline">
           <View style={{ gap: 10 }}>
             <View style={[s.dangerBlock, { borderColor: theme.expense + '55' }]}>

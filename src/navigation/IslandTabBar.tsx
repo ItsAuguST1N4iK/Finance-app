@@ -99,7 +99,15 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
                   size={22}
                   color={color}
                 />
-                <Text style={[styles.tabLabel, { color }]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    { color, fontSize: route.name === 'Settings' ? 7.5 : 9 },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
                   {label}
                 </Text>
               </Animated.View>

@@ -12,11 +12,17 @@ import { usePlannedIncomeStore } from '../store/plannedIncomeSlice';
 import { useExchangeRatesStore } from '../store/exchangeRatesSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import type { Account, UnifiedTransaction, PlannedIncome } from '../types';
+import { TransactionListItem } from '../components/TransactionListItem';
+import { AccountCard, ACCOUNT_CARD_SNAP } from '../components/AccountCard';
+import { CardPreview } from '../components/CardPreview';
+import { DateSeparator } from '../components/DateSeparator';
+import { TxDetailModal } from '../components/TxDetailModal';
+import { useTagLabels } from '../hooks/useTagLabels';
+import type { Account, PlannedIncome, UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
+import { getDatabase } from '../db/migrations';
 import { format } from 'date-fns';
 import { uk } from 'date-fns/locale';
-import { getDatabase } from '../db/migrations';
 
 // ─── Color presets for card editing ──────────────────
 
@@ -65,18 +71,7 @@ function CardEditModal({ account, visible, onClose, onSave }: CardEditModalProps
             </TouchableOpacity>
           </View>
 
-          {/* Preview */}
-          <View style={[ceStyles.preview, { backgroundColor: color }]}>
-            <Text style={ceStyles.previewPlatform}>{account.platform.toUpperCase()}</Text>
-            <Text style={ceStyles.previewBalance}>
-              {account.balance != null
-                ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)} ${account.currency}`
-                : '—'}
-            </Text>
-            <Text style={ceStyles.previewName}>{name || account.name}</Text>
-          </View>
-
-          {/* Name input */}
+          <CardPreview account={account} name={name} color={color} />
           <Text style={[ceStyles.label, { color: theme.subtext }]}>{t.dashCardName}</Text>
           <TextInput
             style={[ceStyles.input, { backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text }]}
@@ -146,42 +141,6 @@ const ceStyles = StyleSheet.create({
   saveBtn:         { flex: 2, borderRadius: 10, padding: 13, alignItems: 'center' },
   saveBtnText:     { color: '#fff', fontSize: 15, fontWeight: '700' },
 });
-
-// ─── Account Card ─────────────────────────────────────
-
-function AccountCard({ account, onEdit, fadeAnim }: {
-  account: Account; onEdit: () => void; fadeAnim: Animated.Value;
-}) {
-  const { theme }   = useTheme();
-  const cardColor   = account.color ?? '#1e293b';
-
-  return (
-    <Animated.View style={{ opacity: fadeAnim }}>
-      <TouchableOpacity
-        style={[styles.accountCard, { backgroundColor: cardColor }]}
-        onLongPress={onEdit}
-        activeOpacity={0.85}
-      >
-        <View style={styles.accountCardHeader}>
-          <Text style={[styles.accountPlatform, { color: 'rgba(255,255,255,0.65)' }]}>
-            {account.platform.toUpperCase()}
-          </Text>
-          <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }} activeOpacity={0.75}>
-            <Ionicons name="pencil-outline" size={14} color="rgba(255,255,255,0.65)" />
-          </TouchableOpacity>
-        </View>
-        <Text style={[styles.accountBalance, { color: '#fff' }]}>
-          {account.balance != null
-            ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)}`
-            : '—'}
-        </Text>
-        <Text style={[styles.accountName, { color: 'rgba(255,255,255,0.8)' }]} numberOfLines={1}>
-          {account.displayName ?? account.name}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
 
 // ─── Exchange Rates Widget ────────────────────────────
 
@@ -374,31 +333,6 @@ const erStyles = StyleSheet.create({
   pickerItemText: { fontSize: 15, fontWeight: '500' },
 });
 
-// ─── Recent TX Row ────────────────────────────────────
-
-function TxRow({ tx }: { tx: UnifiedTransaction }) {
-  const { theme } = useTheme();
-  const isIncome = tx.type === 'income';
-  const sign     = isIncome ? '+' : tx.type === 'expense' ? '−' : '';
-  const color    = isIncome ? theme.income : tx.type === 'expense' ? theme.expense : theme.subtext;
-
-  return (
-    <View style={[styles.txRow, { borderBottomColor: theme.border }]}>
-      <View style={styles.txLeft}>
-        <Text style={[styles.txDesc, { color: theme.text }]} numberOfLines={1}>
-          {tx.description ?? tx.category ?? 'Транзакція'}
-        </Text>
-        <Text style={[styles.txDate, { color: theme.subtext }]}>
-          {format(tx.transactionDate, 'd MMM', { locale: uk })} · {tx.platform}
-        </Text>
-      </View>
-      <Text style={[styles.txAmount, { color, paddingRight: 12 }]}>
-        {sign}{Math.abs(tx.amount).toLocaleString('uk-UA')} {currencySymbol(tx.currency)}
-      </Text>
-    </View>
-  );
-}
-
 // ─── Planner Alert ────────────────────────────────────
 
 function PlannerAlert({ item }: { item: PlannedIncome }) {
@@ -439,15 +373,19 @@ export function DashboardScreen() {
   const { theme } = useTheme();
   const { t }     = useLanguage();
   const { accounts, loadAccounts, updateDisplay }  = useAccountsStore();
-  const { transactions, loadTransactions }          = useTransactionsStore();
+  const { recentTransactions, loadRecentTransactions } = useTransactionsStore();
   const { items: plannedItems, loadItems }           = usePlannedIncomeStore();
+  const tagLabels = useTagLabels();
   const [refreshing,   setRefreshing]   = React.useState(false);
   const [editAccount,  setEditAccount]  = useState<Account | null>(null);
+  const [detailTx,     setDetailTx]     = useState<UnifiedTransaction | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadAccounts();
-    loadTransactions({});
+    loadRecentTransactions();
     loadItems();
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -456,10 +394,16 @@ export function DashboardScreen() {
     }).start();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadRecentTransactions();
+    }, []),
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     loadAccounts();
-    loadTransactions({});
+    loadRecentTransactions();
     loadItems();
     setRefreshing(false);
   }, []);
@@ -470,7 +414,8 @@ export function DashboardScreen() {
     .filter((a) => a.currency === 'UAH' && a.balance != null)
     .reduce((sum, a) => sum + (a.balance ?? 0), 0);
 
-  const recentTxs       = transactions.slice(0, 10);
+  const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
   const upcomingPlanned = plannedItems
     .filter((i) => i.status === 'pending' || i.status === 'overdue')
     .slice(0, 3);
@@ -494,14 +439,36 @@ export function DashboardScreen() {
 
         {/* Accounts */}
         {visibleAccounts.length > 0 && (
-          <View style={styles.section}>
+          <Animated.View style={[styles.section, { opacity: fadeAnim }]}>
             <Text style={[styles.sectionTitle, { color: theme.subtext }]}>{t.dashAccounts}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.accountsScroll}>
-              {visibleAccounts.map((a) => (
-                <AccountCard key={a.id} account={a} fadeAnim={fadeAnim} onEdit={() => setEditAccount(a)} />
-              ))}
-            </ScrollView>
-          </View>
+            <Animated.FlatList
+              horizontal
+              data={visibleAccounts}
+              keyExtractor={(a) => a.id}
+              showsHorizontalScrollIndicator={false}
+              style={styles.accountsScroll}
+              contentContainerStyle={styles.accountsListContent}
+              snapToInterval={ACCOUNT_CARD_SNAP}
+              decelerationRate="fast"
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                { useNativeDriver: true },
+              )}
+              scrollEventThrottle={16}
+              renderItem={({ item, index }) => (
+                <AccountCard
+                  account={item}
+                  index={index}
+                  selected={selectedAccountId === item.id}
+                  scrollX={scrollX}
+                  onSelect={() => setSelectedAccountId(
+                    selectedAccountId === item.id ? null : item.id,
+                  )}
+                  onEdit={() => setEditAccount(item)}
+                />
+              )}
+            />
+          </Animated.View>
         )}
 
         {/* Exchange rates */}
@@ -521,13 +488,37 @@ export function DashboardScreen() {
         {/* Recent txs */}
         <View style={[styles.section, { paddingBottom: 100 }]}>
           <Text style={[styles.sectionTitle, { color: theme.subtext }]}>{t.dashRecentTx}</Text>
-          {recentTxs.length === 0 ? (
+          {recentTransactions.length === 0 ? (
             <Text style={[styles.emptyText, { color: theme.subtext }]}>{t.dashNoTx}</Text>
           ) : (
-            recentTxs.map((tx) => <TxRow key={tx.id} tx={tx} />)
+            recentTransactions.map((tx, idx) => {
+              const acc = accountMap.get(tx.accountId);
+              const dateLabel = format(tx.transactionDate, 'd MMMM yyyy', { locale: uk });
+              const prevDate = idx > 0
+                ? format(recentTransactions[idx - 1].transactionDate, 'd MMMM yyyy', { locale: uk })
+                : '';
+              return (
+                <React.Fragment key={tx.id}>
+                  {dateLabel !== prevDate && <DateSeparator label={dateLabel} />}
+                  <TransactionListItem
+                    item={tx}
+                    tagLabels={tagLabels}
+                    accountColor={acc?.color ?? theme.accent}
+                    accountName={acc ? (acc.displayName ?? acc.name) : tx.platform}
+                    onPress={() => setDetailTx(tx)}
+                  />
+                </React.Fragment>
+              );
+            })
           )}
         </View>
       </ScrollView>
+
+      <TxDetailModal
+        item={detailTx}
+        visible={!!detailTx}
+        onClose={() => setDetailTx(null)}
+      />
 
       {/* Card Edit Modal */}
       {editAccount && (
@@ -558,28 +549,13 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '700',
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
   },
-  accountsScroll:  { marginHorizontal: -16, paddingHorizontal: 16 },
-  accountCard: {
-    borderRadius: 16, padding: 14, marginRight: 12, width: 180, minHeight: 100,
-    justifyContent: 'space-between',
-  },
-  accountCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  accountPlatform: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
-  accountBalance:  { fontSize: 17, fontWeight: '800' },
-  accountName:     { fontSize: 11 },
+  accountsScroll:  { marginHorizontal: -16 },
+  accountsListContent: { paddingHorizontal: 16, paddingVertical: 4 },
   plannerAlert: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1,
   },
   plannerName: { fontSize: 14, fontWeight: '500' },
   plannerSub:  { fontSize: 12, marginTop: 2 },
-  txRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 12, borderBottomWidth: 1,
-  },
-  txLeft:   { flex: 1, marginRight: 8 },
-  txDesc:   { fontSize: 14 },
-  txDate:   { fontSize: 12, marginTop: 2 },
-  txAmount: { fontSize: 14, fontWeight: '600' },
   emptyText: { fontSize: 14, lineHeight: 22, textAlign: 'center', paddingVertical: 20 },
 });

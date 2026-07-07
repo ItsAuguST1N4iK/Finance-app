@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, useWindowDimensions,
+  TouchableOpacity, useWindowDimensions, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Svg, Rect, Text as SvgText, Line, Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnalyticsStore, ChartBar } from '../store/analyticsSlice';
+import { computeYearBands } from '../utils/chartGranularity';
+import { useExchangeRatesStore } from '../store/exchangeRatesSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -100,13 +103,19 @@ function BarChart({ bars, subTextColor, width }: {
   const { theme } = useTheme();
   if (bars.length === 0) return null;
 
-  const height = 200;
+  const height = 218;
   const padL   = 8;
   const padR   = 8;
   const padT   = 24;
-  const padB   = 30;
+  const padB   = 52;
   const chartW = width - padL - padR;
   const chartH = height - padT - padB;
+  const baseline = padT + chartH;
+  const yearBandH = 16;
+  const yearBandY = height - yearBandH - 2;
+
+  const yearBands = computeYearBands(bars);
+  const showYearBands = yearBands.length > 1 || (yearBands.length === 1 && bars.length > 4);
 
   const maxVal = Math.max(...bars.map((b) => Math.max(b.income, b.expense)), 1);
 
@@ -115,7 +124,12 @@ function BarChart({ bars, subTextColor, width }: {
     val: (maxVal * frac),
   }));
 
-  const showEvery = bars.length > 20 ? Math.ceil(bars.length / 12) : 1;
+  const minGroupW = 28;
+  const showEvery = bars.length * minGroupW > chartW
+    ? Math.ceil((bars.length * minGroupW) / chartW / 2)
+    : bars.length > 20
+      ? Math.ceil(bars.length / 12)
+      : 1;
   const groupW    = chartW / bars.length;
   const gap       = Math.max(1, groupW * 0.08);
   const barW      = Math.max(2, Math.floor((groupW - gap) / 2) - 1);
@@ -132,7 +146,6 @@ function BarChart({ bars, subTextColor, width }: {
   const incomePath  = smoothBezierPath(incomePts);
   const expensePath = smoothBezierPath(expensePts);
 
-  const baseline = padT + chartH;
   const incomeAreaPath  = incomePath  + ` L ${incomePts[incomePts.length - 1].x},${baseline} L ${incomePts[0].x},${baseline} Z`;
   const expenseAreaPath = expensePath + ` L ${expensePts[expensePts.length - 1].x},${baseline} L ${expensePts[0].x},${baseline} Z`;
 
@@ -166,10 +179,51 @@ function BarChart({ bars, subTextColor, width }: {
             <Rect x={expenseX} y={padT + chartH - expenseH} width={barW} height={expenseH}
               rx={Math.min(barW / 2, 3)} fill={theme.expense} opacity={0.65} />
             {showLabel && (
-              <SvgText x={groupX + groupW / 2} y={height - 6} fontSize={9} fill={subTextColor} textAnchor="middle">
+              <SvgText
+                x={groupX + groupW / 2}
+                y={showYearBands ? baseline + 14 : height - 8}
+                fontSize={9}
+                fill={subTextColor}
+                textAnchor="middle"
+              >
                 {bar.label}
               </SvgText>
             )}
+          </React.Fragment>
+        );
+      })}
+      {showYearBands && yearBands.map((band) => {
+        const x1 = padL + band.startIdx * groupW;
+        const x2 = padL + (band.endIdx + 1) * groupW;
+        const cx = (x1 + x2) / 2;
+        return (
+          <React.Fragment key={`y-${band.year}-${band.startIdx}`}>
+            <Rect
+              x={x1 + 1}
+              y={yearBandY}
+              width={Math.max(0, x2 - x1 - 2)}
+              height={yearBandH}
+              fill={theme.accent}
+              opacity={0.28}
+              rx={3}
+            />
+            <Line
+              x1={x1 + 1}
+              y1={yearBandY}
+              x2={x2 - 1}
+              y2={yearBandY}
+              stroke={theme.accent}
+              strokeWidth={2}
+            />
+            <SvgText
+              x={cx}
+              y={yearBandY + yearBandH - 3}
+              fontSize={11}
+              fill={theme.accent}
+              textAnchor="middle"
+            >
+              {band.year}
+            </SvgText>
           </React.Fragment>
         );
       })}
@@ -181,7 +235,7 @@ function BarChart({ bars, subTextColor, width }: {
       {expensePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
         <Line key={`ed${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.expense} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
       ))}
-      <Line x1={padL} y1={padT + chartH} x2={width - padR} y2={padT + chartH}
+      <Line x1={padL} y1={baseline} x2={width - padR} y2={baseline}
         stroke={subTextColor} strokeWidth={0.6} opacity={0.4} />
     </Svg>
   );
@@ -224,13 +278,14 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 
 interface PlatformShareItem {
-  platform: string;
+  accountId: string;
+  accountName: string;
   total: number;
   pct: number;
   color: string;
 }
 
-function PlatformShareBar({ items }: { items: PlatformShareItem[] }) {
+function PlatformShareBar({ title, items }: { title?: string; items: PlatformShareItem[] }) {
   const { theme } = useTheme();
   const fmt = (v: number) => v >= 1000
     ? `${(v / 1000).toFixed(1)}k`
@@ -240,21 +295,24 @@ function PlatformShareBar({ items }: { items: PlatformShareItem[] }) {
 
   return (
     <View style={platStyles.wrap}>
+      {title ? (
+        <Text style={[platStyles.subTitle, { color: theme.subtext }]}>{title}</Text>
+      ) : null}
       <View style={[platStyles.stackedBar, { backgroundColor: theme.border }]}>
         {items.map((item) => (
           item.pct > 0 && (
             <View
-              key={item.platform}
+              key={item.accountId}
               style={{ width: `${item.pct}%`, backgroundColor: item.color, height: '100%' }}
             />
           )
         ))}
       </View>
       {items.map((item) => (
-        <View key={item.platform} style={platStyles.legendRow}>
+        <View key={item.accountId} style={platStyles.legendRow}>
           <View style={platStyles.legendLeft}>
             <View style={[platStyles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={[platStyles.name, { color: theme.text }]}>{item.platform.toUpperCase()}</Text>
+            <Text style={[platStyles.name, { color: theme.text }]} numberOfLines={1}>{item.accountName}</Text>
           </View>
           <Text style={[platStyles.pctLabel, { color: theme.subtext }]}>
             {item.pct.toFixed(1)}%
@@ -267,7 +325,8 @@ function PlatformShareBar({ items }: { items: PlatformShareItem[] }) {
 }
 
 const platStyles = StyleSheet.create({
-  wrap:       { marginBottom: 8 },
+  wrap:       { marginBottom: 16 },
+  subTitle:   { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
   stackedBar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', marginBottom: 12 },
   legendRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   legendLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
@@ -308,20 +367,42 @@ export function AnalyticsScreen() {
   const { theme }    = useTheme();
   const { t }        = useLanguage();
   const { width: W } = useWindowDimensions();
+  const chartWidth = W - 48;
   const {
     summary, platformShares, topCategories, chartBars,
     filters, setFilters, compute, isLoading, homeCurrency, loadHomeCurrency,
   } = useAnalyticsStore();
+  const { fetchRates } = useExchangeRatesStore();
 
   const [dateFromOpen, setDateFromOpen] = useState(false);
   const [dateToOpen,   setDateToOpen]   = useState(false);
   const [customFrom,   setCustomFrom]   = useState<Date | null>(null);
   const [customTo,     setCustomTo]     = useState<Date | null>(null);
+  const [refreshing,   setRefreshing]   = useState(false);
 
   useEffect(() => {
     loadHomeCurrency();
-    compute();
+    fetchRates().then(() => compute(chartWidth));
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeCurrency();
+      compute(chartWidth);
+    }, [chartWidth]),
+  );
+
+  useEffect(() => {
+    compute(chartWidth);
+  }, [chartWidth]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    loadHomeCurrency();
+    await fetchRates();
+    compute(chartWidth);
+    setRefreshing(false);
+  }, [chartWidth]);
 
   const currSym = currencySymbol(homeCurrency);
   const currLabel = `${currSym} ${homeCurrency}`;
@@ -374,8 +455,6 @@ export function AnalyticsScreen() {
     { key: 'custom',     label: t.analyticsCustom     },
   ];
 
-  const isYearView = filters.periodPreset === 'this_year' || filters.periodPreset === 'last_year';
-
   function openCustomRange() {
     // Reset previous custom dates on each new custom selection
     setCustomFrom(null);
@@ -391,30 +470,45 @@ export function AnalyticsScreen() {
     });
   }
 
-  // Group platformShares by platform
-  const allPlatforms = [...new Set(platformShares.map((s) => s.platform))];
-  const platformTotals = allPlatforms.map((platform) => {
-    const inc = platformShares.find((s) => s.platform === platform && s.type === 'income');
-    const exp = platformShares.find((s) => s.platform === platform && s.type === 'expense');
-    return {
-      platform,
-      total: (inc?.platformTotal ?? 0) + (exp?.platformTotal ?? 0),
-    };
-  }).filter((p) => p.total > 0);
+  function buildAccountShareItems(type: 'income' | 'expense'): PlatformShareItem[] {
+    const shares = platformShares.filter((s) => s.type === type);
+    const map = new Map<string, { accountId: string; accountName: string; total: number; color: string }>();
+    for (const s of shares) {
+      const existing = map.get(s.accountId);
+      if (existing) {
+        existing.total += s.platformTotal;
+      } else {
+        map.set(s.accountId, {
+          accountId: s.accountId,
+          accountName: s.accountName,
+          total: s.platformTotal,
+          color: s.color ?? PLATFORM_COLORS[s.platform] ?? theme.accent,
+        });
+      }
+    }
+    const items = [...map.values()].filter((p) => p.total > 0);
+    const grand = items.reduce((sum, p) => sum + p.total, 0) || 1;
+    return items
+      .map((p) => ({
+        accountId: p.accountId,
+        accountName: p.accountName,
+        total: p.total,
+        pct: (p.total / grand) * 100,
+        color: p.color,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
 
-  const grandTotal = platformTotals.reduce((sum, p) => sum + p.total, 0) || 1;
-  const platformShareItems: PlatformShareItem[] = platformTotals
-    .map((p) => ({
-      platform: p.platform,
-      total: p.total,
-      pct: (p.total / grandTotal) * 100,
-      color: PLATFORM_COLORS[p.platform] ?? theme.accent,
-    }))
-    .sort((a, b) => b.total - a.total);
+  const expenseShareItems = buildAccountShareItems('expense');
+  const incomeShareItems  = buildAccountShareItems('income');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+      >
 
         {/* Period presets */}
         <ScrollView
@@ -474,45 +568,26 @@ export function AnalyticsScreen() {
         {/* Chart section */}
         {chartBars.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.chartHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.subtext }]}>
-                {t.analyticsIncomeAndExpense}
-              </Text>
-              {isYearView && (
-                <View style={[styles.togglePill, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, filters.chartMode !== 'daily' && { backgroundColor: theme.accent + 'cc' }]}
-                    onPress={() => setFilters({ chartMode: 'monthly' })}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.toggleBtnText, { color: filters.chartMode !== 'daily' ? '#fff' : theme.subtext }]}>
-                      {t.analyticsMonthly}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, filters.chartMode === 'daily' && { backgroundColor: theme.accent + 'cc' }]}
-                    onPress={() => setFilters({ chartMode: 'daily' })}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.toggleBtnText, { color: filters.chartMode === 'daily' ? '#fff' : theme.subtext }]}>
-                      {t.analyticsDaily}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            <Text style={[styles.sectionTitle, { color: theme.subtext, marginBottom: 8 }]}>
+              {t.analyticsIncomeAndExpense}
+            </Text>
             <ChartLegend />
             <View style={[styles.chartCard, { backgroundColor: theme.card, width: W - 32 }]}>
-              <BarChart bars={chartBars} subTextColor={theme.subtext} width={W - 48} />
+              <BarChart bars={chartBars} subTextColor={theme.subtext} width={chartWidth} />
             </View>
           </View>
         )}
 
-        {/* Combined Platform Statistics */}
-        {platformShareItems.length > 0 && (
+        {/* Statistics by cards */}
+        {(expenseShareItems.length > 0 || incomeShareItems.length > 0) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.subtext }]}>{t.analyticsStatsByPlatform}</Text>
-            <PlatformShareBar items={platformShareItems} />
+            {expenseShareItems.length > 0 && (
+              <PlatformShareBar title={t.analyticsExpenses} items={expenseShareItems} />
+            )}
+            {incomeShareItems.length > 0 && (
+              <PlatformShareBar title={t.analyticsIncome} items={incomeShareItems} />
+            )}
           </View>
         )}
 
@@ -592,9 +667,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 8,
   },
-  togglePill: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, overflow: 'hidden' },
-  toggleBtn:  { paddingHorizontal: 10, paddingVertical: 5 },
-  toggleBtnText: { fontSize: 11, fontWeight: '600' },
   chartCard: {
     borderRadius: 14, paddingVertical: 12, paddingHorizontal: 8, overflow: 'hidden',
   },
