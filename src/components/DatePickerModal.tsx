@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   ScrollView, TextInput, Platform, useWindowDimensions, Keyboard,
@@ -31,10 +31,12 @@ type Step = 'year' | 'month' | 'day';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: CURRENT_YEAR - 1900 + 1 }, (_, i) => CURRENT_YEAR - i);
-const MONTH_ITEM_H = 52;
+const MONTH_ITEM_H = 54;
+const LOOP_COPIES = 5;
+const LOOP_MID = Math.floor(LOOP_COPIES / 2);
 
 export function DatePickerModal({ visible, value, onClose, onConfirm, title, minDate, maxDate }: Props) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const { height: SCREEN_H } = useWindowDimensions();
 
@@ -43,12 +45,16 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
   const [selYear,   setSelYear]   = useState(now.getFullYear());
   const [selMonth,  setSelMonth]  = useState(now.getMonth());
   const [selDay,    setSelDay]    = useState(now.getDate());
+  const [previewYear,  setPreviewYear]  = useState(now.getFullYear());
+  const [previewMonth, setPreviewMonth] = useState(now.getMonth());
   const [inputMode, setInputMode] = useState(false);
   const [inputVal,  setInputVal]  = useState('');
   const [keyboardInset, setKeyboardInset] = useState(0);
 
   const yearScrollRef  = useRef<ScrollView>(null);
   const monthScrollRef = useRef<ScrollView>(null);
+  const loopedYears  = useMemo(() => Array.from({ length: LOOP_COPIES }, () => YEARS).flat(), []);
+  const loopedMonths = useMemo(() => Array.from({ length: LOOP_COPIES }, () => t.months).flat(), [t.months]);
 
   useEffect(() => {
     if (visible) {
@@ -57,6 +63,8 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
       setSelYear(d.getFullYear());
       setSelMonth(d.getMonth());
       setSelDay(d.getDate());
+      setPreviewYear(d.getFullYear());
+      setPreviewMonth(d.getMonth());
       setInputMode(false);
       setInputVal('');
       setKeyboardInset(0);
@@ -76,31 +84,68 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
     if (step === 'year' && !inputMode && yearScrollRef.current) {
       const idx = YEARS.findIndex((y) => y === selYear);
       if (idx >= 0) {
+        const y = (LOOP_MID * YEARS.length + idx) * MONTH_ITEM_H;
         setTimeout(() => {
-          yearScrollRef.current?.scrollTo({ y: idx * MONTH_ITEM_H, animated: false });
+          yearScrollRef.current?.scrollTo({ y, animated: false });
         }, 50);
       }
     }
     if (step === 'month' && !inputMode && monthScrollRef.current) {
+      const y = (LOOP_MID * 12 + selMonth) * MONTH_ITEM_H;
       setTimeout(() => {
-        monthScrollRef.current?.scrollTo({ y: selMonth * MONTH_ITEM_H, animated: false });
+        monthScrollRef.current?.scrollTo({ y, animated: false });
       }, 50);
     }
-  }, [step, inputMode, visible, selMonth]);
+  }, [step, inputMode, visible, selMonth, selYear]);
 
-  function goNextStep(from: Step) {
-    setInputMode(false);
-    setInputVal('');
-    if (from === 'year') {
-      const cap = daysInMonth(selYear, selMonth);
-      if (selDay > cap) setSelDay(cap);
-      setStep('month');
-    } else if (from === 'month') {
-      const cap = daysInMonth(selYear, selMonth);
-      if (selDay > cap) setSelDay(cap);
-      setStep('day');
+  function recenterYearScroll(y: number) {
+    const idx = Math.round(y / MONTH_ITEM_H);
+    const yearIdx = ((idx % YEARS.length) + YEARS.length) % YEARS.length;
+    setPreviewYear(YEARS[yearIdx]);
+    const midY = (LOOP_MID * YEARS.length + yearIdx) * MONTH_ITEM_H;
+    if (Math.abs(y - midY) > YEARS.length * MONTH_ITEM_H) {
+      yearScrollRef.current?.scrollTo({ y: midY, animated: false });
     }
   }
+
+  function recenterMonthScroll(y: number) {
+    const idx = Math.round(y / MONTH_ITEM_H);
+    const monthIdx = ((idx % 12) + 12) % 12;
+    setPreviewMonth(monthIdx);
+    const midY = (LOOP_MID * 12 + monthIdx) * MONTH_ITEM_H;
+    if (Math.abs(y - midY) > 12 * MONTH_ITEM_H) {
+      monthScrollRef.current?.scrollTo({ y: midY, animated: false });
+    }
+  }
+
+  function confirmYearStep() {
+    setSelYear(previewYear);
+    const cap = daysInMonth(previewYear, selMonth);
+    if (selDay > cap) setSelDay(cap);
+    setPreviewMonth(selMonth);
+    setStep('month');
+    setInputMode(false);
+    setInputVal('');
+  }
+
+  function confirmMonthStep() {
+    setSelMonth(previewMonth);
+    const cap = daysInMonth(selYear, previewMonth);
+    if (selDay > cap) setSelDay(cap);
+    setStep('day');
+    setInputMode(false);
+    setInputVal('');
+  }
+
+  function handleStepConfirm() {
+    if (step === 'year') confirmYearStep();
+    else if (step === 'month') confirmMonthStep();
+    else handleConfirm();
+  }
+
+  const stepConfirmLabel = step === 'year'  ? t.dateConfirmYear
+    : step === 'month' ? t.dateConfirmMonth
+    : t.dateConfirmDay;
 
   function handleConfirm() {
     Keyboard.dismiss();
@@ -117,19 +162,17 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
     if (step === 'year') {
       const y = parseInt(val, 10);
       if (!isNaN(y) && y >= 1900 && y <= CURRENT_YEAR) {
-        setSelYear(y);
+        setPreviewYear(y);
         setInputMode(false);
         setInputVal('');
-        goNextStep('year');
       }
     } else if (step === 'month') {
       let m = parseInt(val, 10);
       if (!isNaN(m)) {
         m = ((m - 1) % 12 + 12) % 12;
-        setSelMonth(m);
+        setPreviewMonth(m);
         setInputMode(false);
         setInputVal('');
-        goNextStep('month');
       }
     } else if (step === 'day') {
       const d = parseInt(val, 10);
@@ -150,7 +193,7 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
   });
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const s = makeStyles(theme, SCREEN_H);
+  const s = makeStyles(theme, SCREEN_H, cardSurface());
 
   const contentMinH = SCREEN_H * 0.30;
 
@@ -247,18 +290,22 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
                 style={s.listScroll}
                 contentContainerStyle={s.listScrollContent}
                 showsVerticalScrollIndicator={false}
+                snapToInterval={MONTH_ITEM_H}
+                decelerationRate="fast"
+                onMomentumScrollEnd={(e) => recenterYearScroll(e.nativeEvent.contentOffset.y)}
+                onScrollEndDrag={(e) => recenterYearScroll(e.nativeEvent.contentOffset.y)}
               >
-                {YEARS.map((y) => (
+                {loopedYears.map((y, i) => (
                   <TouchableOpacity
-                    key={y}
-                    style={[s.listItem, y === selYear && { backgroundColor: theme.accent + '22' }]}
-                    onPress={() => { setSelYear(y); goNextStep('year'); }}
+                    key={`y-${i}-${y}`}
+                    style={[s.listItem, y === previewYear && { backgroundColor: theme.accent + '22' }]}
+                    onPress={() => setPreviewYear(y)}
                     activeOpacity={0.75}
                   >
-                    <Text style={[s.listItemText, y === selYear && { color: theme.accent, fontWeight: '700' }]}>
+                    <Text style={[s.listItemText, y === previewYear && { color: theme.accent, fontWeight: '700' }]}>
                       {y}
                     </Text>
-                    {y === selYear && <Ionicons name="checkmark" size={16} color={theme.accent} />}
+                    {y === previewYear && <Ionicons name="checkmark" size={16} color={theme.accent} />}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -270,14 +317,19 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
                 style={s.listScroll}
                 contentContainerStyle={s.listScrollContent}
                 showsVerticalScrollIndicator={false}
+                snapToInterval={MONTH_ITEM_H}
+                decelerationRate="fast"
+                onMomentumScrollEnd={(e) => recenterMonthScroll(e.nativeEvent.contentOffset.y)}
+                onScrollEndDrag={(e) => recenterMonthScroll(e.nativeEvent.contentOffset.y)}
               >
-                {t.months.map((name, monthIdx) => {
-                  const selected = monthIdx === selMonth;
+                {loopedMonths.map((name, i) => {
+                  const monthIdx = i % 12;
+                  const selected = monthIdx === previewMonth;
                   return (
                     <TouchableOpacity
-                      key={name}
+                      key={`m-${i}-${name}`}
                       style={[s.listItem, selected && { backgroundColor: theme.accent + '22' }]}
-                      onPress={() => { setSelMonth(monthIdx); goNextStep('month'); }}
+                      onPress={() => setPreviewMonth(monthIdx)}
                       activeOpacity={0.75}
                     >
                       <View style={s.listItemCenter}>
@@ -332,8 +384,8 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
           </View>
 
           <View style={s.footer}>
-            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: theme.accent }]} onPress={handleConfirm} activeOpacity={0.75}>
-              <Text style={s.confirmBtnText}>{t.save}</Text>
+            <TouchableOpacity style={[s.confirmBtn, { backgroundColor: theme.accent }]} onPress={handleStepConfirm} activeOpacity={0.75}>
+              <Text style={s.confirmBtnText}>{stepConfirmLabel}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -342,7 +394,11 @@ export function DatePickerModal({ visible, value, onClose, onConfirm, title, min
   );
 }
 
-function makeStyles(theme: AppTheme, screenH: number) {
+function makeStyles(
+  theme: AppTheme,
+  screenH: number,
+  surface: { backgroundColor: string; borderColor: string; borderWidth: number },
+) {
   return StyleSheet.create({
     overlay: {
       flex: 1,
@@ -354,13 +410,13 @@ function makeStyles(theme: AppTheme, screenH: number) {
       backgroundColor: theme.overlay,
     },
     sheet: {
-      backgroundColor: theme.card,
+      backgroundColor: surface.backgroundColor,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       height: screenH * 0.72,
       overflow: 'hidden',
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
+      borderTopWidth: Math.max(1, surface.borderWidth),
+      borderTopColor: surface.borderColor !== 'transparent' ? surface.borderColor : theme.border,
     },
     header: {
       flexDirection: 'row',
@@ -443,11 +499,11 @@ function makeStyles(theme: AppTheme, screenH: number) {
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      paddingVertical: 11,
+      paddingVertical: 12,
       paddingHorizontal: 8,
       borderRadius: 8,
-      marginBottom: 2,
-      height: 50,
+      marginBottom: 6,
+      height: MONTH_ITEM_H,
     },
     listItemCenter: {
       flexDirection: 'row',

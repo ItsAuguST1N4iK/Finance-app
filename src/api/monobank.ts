@@ -14,8 +14,7 @@
  */
 
 import type { Account, UnifiedTransaction } from '../types';
-import { autoDetectTag } from '../utils/tags';
-import { autoDetectCategory } from '../utils/categories';
+import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
 
 const BASE = 'https://api.monobank.ua';
 
@@ -150,20 +149,19 @@ export function monoStatementToTx(
              : amount > 0     ? 'income'   as const
              :                  'expense'  as const;
 
-  const tag = autoDetectTag(
-    stmt.mcc || undefined,
-    stmt.description || stmt.comment || undefined,
+  const catKey = resolveImportCategory({
+    mcc: stmt.mcc || undefined,
+    description: stmt.description || stmt.comment || undefined,
     ownIbans,
-    stmt.counterIban,
     ownAccounts,
-  );
-  const category = autoDetectCategory(
-    stmt.mcc || undefined,
-    stmt.description || stmt.comment || undefined,
-    tag,
-    undefined,
-    ownIbans,
-  );
+    counterIban: stmt.counterIban,
+    amount: Math.abs(amount),
+    platform: 'monobank',
+    type,
+    currency: isoAlpha(stmt.currencyCode),
+    selfTransfer: isSelfTransfer,
+  });
+  const { tag, category } = categoryFields(catKey);
 
   return {
     id:              `mono_${stmt.id}`,

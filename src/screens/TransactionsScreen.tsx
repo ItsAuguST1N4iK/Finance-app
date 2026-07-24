@@ -15,10 +15,10 @@ import { DatePickerModal } from '../components/DatePickerModal';
 import { TransactionListItem } from '../components/TransactionListItem';
 import { DateSeparator } from '../components/DateSeparator';
 import { TxDetailModal } from '../components/TxDetailModal';
-import { useTagLabels } from '../hooks/useTagLabels';
+import { useCategoryLabels } from '../hooks/useCategoryLabels';
 import type { UnifiedTransaction, Platform as Plat, TransactionType, Account } from '../types';
 import { currencySymbol } from '../utils/currency';
-import { ALL_TAGS, TagType } from '../utils/tags';
+import { ALL_CATEGORY_KEYS, type CategoryKey } from '../utils/categoryRegistry';
 import { format } from 'date-fns';
 import { uk } from 'date-fns/locale';
 
@@ -72,11 +72,11 @@ interface FilterBarProps {
   setDateTo: (d: Date | null) => void;
   selCurrency: string | null;
   setSelCurrency: (c: string | null) => void;
-  selTag: string | null;
-  setSelTag: (tag: string | null) => void;
+  selCategory: string | null;
+  setSelCategory: (tag: string | null) => void;
   platformLabels: Record<FilterPlatform, string>;
   typeLabels: Record<TransactionType, string>;
-  tagLabels: Record<string, string>;
+  categoryLabels: Record<string, string>;
   onOpenFilters: () => void;
 }
 
@@ -85,10 +85,10 @@ function FilterBar({
   selAccountId, setSelAccountId, accounts,
   dateFrom, dateTo, setDateFrom, setDateTo,
   selCurrency, setSelCurrency,
-  selTag, setSelTag,
-  platformLabels, typeLabels, tagLabels, onOpenFilters,
+  selCategory, setSelCategory,
+  platformLabels, typeLabels, categoryLabels, onOpenFilters,
 }: FilterBarProps) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
@@ -121,12 +121,12 @@ function FilterBar({
         setSelTypes(selTypes.filter((x) => x !== ty));
       },
     })),
-    ...(selTag ? [{
-      id: 'tag',
-      label: `🏷 ${tagLabels[selTag] ?? selTag}`,
+    ...(selCategory ? [{
+      id: 'category',
+      label: categoryLabels[selCategory] ?? selCategory,
       onRemove: () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setSelTag(null);
+        setSelCategory(null);
       },
     }] : []),
     ...(dateFrom ? [{
@@ -165,7 +165,7 @@ function FilterBar({
   if (!hasAny) return null;
 
   return (
-    <View style={[fbStyles.container, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <View style={[fbStyles.container, cardSurface(), { borderColor: theme.border }]}>
       <View style={fbStyles.chipsWrap}>
         {visibleChips.map((chip) => (
           <FilterChip key={chip.id} label={chip.label} onRemove={chip.onRemove} />
@@ -220,23 +220,23 @@ interface FilterModalProps {
   setDateTo: (d: Date | null) => void;
   selCurrency: string | null;
   setSelCurrency: (c: string | null) => void;
-  selTag: string | null;
-  setSelTag: (tag: string | null) => void;
+  selCategory: string | null;
+  setSelCategory: (tag: string | null) => void;
   onApply: () => void;
   onReset: () => void;
   platformLabels: Record<FilterPlatform, string>;
   typeLabels: Record<TransactionType, string>;
-  tagLabels: Record<string, string>;
+  categoryLabels: Record<string, string>;
 }
 
 function FilterModal({
   visible, onClose, selPlatforms, setSelPlatforms,
   selTypes, setSelTypes, selAccountId, setSelAccountId, accounts,
   dateFrom, dateTo, setDateFrom, setDateTo,
-  selCurrency, setSelCurrency, selTag, setSelTag,
-  onApply, onReset, platformLabels, typeLabels, tagLabels,
+  selCurrency, setSelCurrency, selCategory, setSelCategory,
+  onApply, onReset, platformLabels, typeLabels, categoryLabels,
 }: FilterModalProps) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const [dateFromOpen, setDateFromOpen] = useState(false);
   const [dateToOpen,   setDateToOpen]   = useState(false);
@@ -261,13 +261,13 @@ function FilterModal({
 
   const activeCount = selPlatforms.length + selTypes.length
     + (selAccountId ? 1 : 0)
-    + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selTag ? 1 : 0);
+    + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selCategory ? 1 : 0);
 
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <View style={[fStyles.overlay, { backgroundColor: theme.overlay }]}>
-        <View style={[fStyles.sheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={[fStyles.sheet, cardSurface(), { borderColor: theme.border }]}>
 
           <View style={fStyles.header}>
             <Text style={[fStyles.title, { color: theme.text }]}>{t.txFilters}</Text>
@@ -353,17 +353,17 @@ function FilterModal({
               })}
             </View>
 
-            {/* Tags */}
+            {/* Categories */}
             <Text style={[fStyles.sectionLabel, { color: theme.subtext, marginTop: 16 }]}>{t.tagSearch}</Text>
             <View style={fStyles.chipsSection}>
-              {ALL_TAGS.map((tag) => {
-                const active = selTag === tag;
+              {ALL_CATEGORY_KEYS.map((cat) => {
+                const active = selCategory === cat;
                 return (
-                  <TouchableOpacity key={tag}
+                  <TouchableOpacity key={cat}
                     style={[fStyles.optionChip, { backgroundColor: active ? theme.accent + '22' : theme.cardAlt, borderColor: active ? theme.accent : theme.border }]}
-                    onPress={() => setSelTag(active ? null : tag)} activeOpacity={0.75}
+                    onPress={() => setSelCategory(active ? null : cat)} activeOpacity={0.75}
                   >
-                    <Text style={[fStyles.optionText, { color: active ? theme.accent : theme.subtext }]}>{tagLabels[tag] ?? tag}</Text>
+                    <Text style={[fStyles.optionText, { color: active ? theme.accent : theme.subtext }]}>{categoryLabels[cat] ?? cat}</Text>
                     {active && <Ionicons name="checkmark" size={14} color={theme.accent} />}
                   </TouchableOpacity>
                 );
@@ -499,11 +499,11 @@ const fStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────
 
 export function TransactionsScreen() {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const { transactions, loadTransactions } = useTransactionsStore();
   const { accounts, loadAccounts } = useAccountsStore();
-  const tagLabels = useTagLabels();
+  const categoryLabels = useCategoryLabels();
   const [refreshing, setRefreshing] = useState(false);
 
   const [search,        setSearch]        = useState('');
@@ -513,7 +513,7 @@ export function TransactionsScreen() {
   const [dateFrom,      setDateFrom]      = useState<Date | null>(null);
   const [dateTo,        setDateTo]        = useState<Date | null>(null);
   const [selCurrency,   setSelCurrency]   = useState<string | null>(null);
-  const [selTag,        setSelTag]        = useState<string | null>(null);
+  const [selCategory,   setSelCategory]   = useState<string | null>(null);
   const [filterVisible, setFilterVisible] = useState(false);
   const [detailTx,      setDetailTx]      = useState<UnifiedTransaction | null>(null);
 
@@ -533,8 +533,8 @@ export function TransactionsScreen() {
     dateFrom:   dateFrom ? dateFrom.getTime() : undefined,
     dateTo:     dateTo   ? dateTo.getTime()   : undefined,
     currency:   selCurrency ?? undefined,
-    tag:        selTag ?? undefined,
-  }), [search, selPlatforms, selTypes, selAccountId, dateFrom, dateTo, selCurrency, selTag]);
+    tag:        selCategory ?? undefined,
+  }), [search, selPlatforms, selTypes, selAccountId, dateFrom, dateTo, selCurrency, selCategory]);
 
   useEffect(() => {
     loadTransactions();
@@ -568,12 +568,12 @@ export function TransactionsScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelPlatforms([]); setSelTypes([]); setSelAccountId(null);
     setDateFrom(null); setDateTo(null);
-    setSelCurrency(null); setSelTag(null);
+    setSelCurrency(null); setSelCategory(null);
   }
 
   const activeFilters = selPlatforms.length + selTypes.length
     + (selAccountId ? 1 : 0)
-    + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selTag ? 1 : 0);
+    + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selCurrency ? 1 : 0) + (selCategory ? 1 : 0);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -586,7 +586,7 @@ export function TransactionsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
       {/* Search + Filter row */}
       <View style={styles.topRow}>
-        <View style={[styles.searchBox, { backgroundColor: theme.card }]}>
+        <View style={[styles.searchBox, cardSurface()]}>
           <Ionicons name="search-outline" size={18} color={theme.subtext} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
@@ -603,7 +603,7 @@ export function TransactionsScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.filterBtn, { backgroundColor: activeFilters > 0 ? theme.accent : theme.card }]}
+          style={[styles.filterBtn, { backgroundColor: activeFilters > 0 ? theme.accent : cardSurface().backgroundColor, borderColor: theme.border, borderWidth: activeFilters > 0 ? 0 : 1 }]}
           onPress={() => setFilterVisible(true)}
           activeOpacity={0.75}
         >
@@ -631,11 +631,11 @@ export function TransactionsScreen() {
         setDateTo={setDateTo}
         selCurrency={selCurrency}
         setSelCurrency={setSelCurrency}
-        selTag={selTag}
-        setSelTag={setSelTag}
+        selCategory={selCategory}
+        setSelCategory={setSelCategory}
         platformLabels={platformLabels}
         typeLabels={typeLabels}
-        tagLabels={tagLabels}
+        categoryLabels={categoryLabels}
         onOpenFilters={() => setFilterVisible(true)}
       />
 
@@ -676,7 +676,7 @@ export function TransactionsScreen() {
               return (
                 <TransactionListItem
                   item={item.data}
-                  tagLabels={tagLabels}
+                  categoryLabels={categoryLabels}
                   accountColor={col}
                   accountName={name}
                   onPress={() => setDetailTx(item.data)}
@@ -707,13 +707,13 @@ export function TransactionsScreen() {
         setDateTo={setDateTo}
         selCurrency={selCurrency}
         setSelCurrency={setSelCurrency}
-        selTag={selTag}
-        setSelTag={setSelTag}
+        selCategory={selCategory}
+        setSelCategory={setSelCategory}
         onApply={applyFilters}
         onReset={resetFilters}
         platformLabels={platformLabels}
         typeLabels={typeLabels}
-        tagLabels={tagLabels}
+        categoryLabels={categoryLabels}
       />
 
       {/* Transaction detail modal */}

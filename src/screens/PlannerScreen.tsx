@@ -33,7 +33,7 @@ function PlannerCard({
   onDelete:  (id: string) => void;
   onEdit:    (item: PlannedIncome) => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
 
   const isExpense = item.planType === 'expense';
@@ -65,8 +65,7 @@ function PlannerCard({
   const accountLabel = account ? (account.displayName ?? account.name) : item.accountId;
 
   return (
-    <View style={[styles.card, {
-      backgroundColor: theme.card,
+    <View style={[styles.card, cardSurface(), {
       borderLeftColor: STATUS_COLORS[item.status],
     }]}>
       <View style={styles.cardHeader}>
@@ -161,7 +160,7 @@ function PlannerFormModal({
   editItem: PlannedIncome | null;
   onClose: () => void;
 }) {
-  const { theme }  = useTheme();
+  const { theme, cardSurface }  = useTheme();
   const { t }      = useLanguage();
   const { addItem, updateItem } = usePlannedIncomeStore();
   const { accounts } = useAccountsStore();
@@ -259,7 +258,7 @@ function PlannerFormModal({
       {alertEl}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
-        <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
+        <View style={[styles.modalCard, cardSurface()]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {isEdit ? t.plannerEditTitle : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}

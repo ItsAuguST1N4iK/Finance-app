@@ -1,22 +1,49 @@
-import type { TagType } from './tags';
 import { autoDetectTag } from './tags';
+import { matchCategoryByRules } from './categoryRules';
+import type { CategoryKey } from './categoryRegistry';
+import { isCategoryKey, normalizeCategoryKey } from './categoryRegistry';
+import type { Platform } from '../types';
 
-/** Human-readable expense category labels (Ukrainian). */
-export const TAG_CATEGORY_UK: Record<TagType, string> = {
-  entertainment: 'Розваги',
-  utilities:     'Продукти та побут',
-  electronics:   'Електроніка',
-  self_transfer: 'Перекази між рахунками',
-  transfer:      'Перекази',
-  top_up:        'Поповнення',
-};
+export interface CategoryDetectExtra {
+  amount?: number;
+  platform?: Platform;
+  type?: string;
+  currency?: string;
+}
 
-const ZEN_TYPE_CATEGORY: Record<string, string> = {
-  'Incoming transfer': 'Надходження',
-  'Outgoing transfer': 'Перекази',
-};
+/** Derive unified category key for a transaction. */
+export function autoDetectCategoryKey(
+  mcc?: number,
+  description?: string,
+  tag?: string | null,
+  bankCategory?: string | null,
+  ownIbans: string[] = [],
+  extra?: CategoryDetectExtra,
+): CategoryKey {
+  if (isCategoryKey(tag)) return tag;
 
-/** Derive display category for a transaction. */
+  const fromRule = matchCategoryByRules({
+    mcc, description, amount: extra?.amount, platform: extra?.platform,
+    type: extra?.type, currency: extra?.currency,
+  });
+  if (fromRule) return fromRule;
+
+  const bank = bankCategory?.trim().toLowerCase();
+  if (bank) {
+    if (/надход|income|salary|зарплат/.test(bank)) return 'income';
+    if (/переказ|transfer/.test(bank)) return 'transfer';
+    if (/продукт|food|grocer/.test(bank)) return 'food';
+    if (/транспорт|transport/.test(bank)) return 'transport';
+    if (/здоров|health|апте/.test(bank)) return 'health';
+  }
+
+  const detected = autoDetectTag(mcc, description, ownIbans);
+  if (detected && isCategoryKey(detected)) return detected;
+
+  return 'other';
+}
+
+/** @deprecated use category key + useCategoryLabels */
 export function autoDetectCategory(
   mcc?: number,
   description?: string,
@@ -24,22 +51,15 @@ export function autoDetectCategory(
   bankCategory?: string | null,
   ownIbans: string[] = [],
 ): string {
-  const bank = bankCategory?.trim();
-  if (bank) return bank;
-
-  const effectiveTag = (tag as TagType | undefined)
-    ?? autoDetectTag(mcc, description, ownIbans);
-
-  if (effectiveTag && effectiveTag in TAG_CATEGORY_UK) {
-    return TAG_CATEGORY_UK[effectiveTag];
-  }
-
-  return 'Інше';
+  return autoDetectCategoryKey(mcc, description, tag, bankCategory, ownIbans);
 }
 
-export function categoryFromZenType(txType?: string): string | undefined {
+export function categoryFromZenType(txType?: string): CategoryKey | undefined {
   if (!txType) return undefined;
-  return ZEN_TYPE_CATEGORY[txType.trim()];
+  const t = txType.trim();
+  if (t === 'Incoming transfer') return 'income';
+  if (t === 'Outgoing transfer') return 'transfer';
+  return undefined;
 }
 
 export function resolveTransactionCategory(tx: {
@@ -47,11 +67,6 @@ export function resolveTransactionCategory(tx: {
   tag?: string | null;
   mcc?: number | null;
   description?: string | null;
-}): string {
-  if (tx.category?.trim()) return tx.category.trim();
-  return autoDetectCategory(
-    tx.mcc ?? undefined,
-    tx.description ?? undefined,
-    tx.tag,
-  );
+}): CategoryKey {
+  return normalizeCategoryKey(tx.tag, tx.category);
 }

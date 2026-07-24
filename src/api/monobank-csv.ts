@@ -9,8 +9,7 @@ import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
 import { parseAmount } from '../utils/parseAmount';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
-import { autoDetectTag } from '../utils/tags';
-import { autoDetectCategory } from '../utils/categories';
+import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
 
 export type MonoCsvCurrencyMode = 'account' | 'operation';
 
@@ -94,10 +93,18 @@ export function parseMonobankCsv(
 
     const self = isSelfTransfer(desc, undefined, undefined, ctx);
     const type = self ? 'transfer' : effectiveType;
-    const tag = self
-      ? 'self_transfer'
-      : autoDetectTag(mcc, desc, ownIbans, undefined, ownAccounts);
-    const category = autoDetectCategory(mcc, desc, tag, undefined, ownIbans);
+    const catKey = resolveImportCategory({
+      mcc,
+      description: desc,
+      ownIbans,
+      ownAccounts,
+      amount,
+      platform: 'monobank',
+      type,
+      currency,
+      selfTransfer: self,
+    });
+    const { tag, category } = categoryFields(catKey);
 
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'monobank', date, amount, currency, desc,

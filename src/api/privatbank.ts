@@ -24,8 +24,7 @@
 import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
-import { autoDetectTag } from '../utils/tags';
-import { autoDetectCategory } from '../utils/categories';
+import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
 import * as XLSX from 'xlsx';
 
 function parsePrivatDate(s: string): number {
@@ -94,10 +93,18 @@ export function parsePrivatbankXlsx(
     const date = parsePrivatDate(dateStr);
     const self = isSelfTransfer(desc, undefined, undefined, ctx);
     const type: UnifiedTransaction['type'] = self ? 'transfer' : (cardAmount >= 0 ? 'income' : 'expense');
-    const tag = self
-      ? 'self_transfer'
-      : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
-    const category = autoDetectCategory(undefined, desc, tag, bankCat || undefined, ownIbans);
+    const catKey = resolveImportCategory({
+      description: desc,
+      bankCategory: bankCat || undefined,
+      ownIbans,
+      ownAccounts,
+      amount,
+      platform: 'privatbank',
+      type,
+      currency,
+      selfTransfer: self,
+    });
+    const { tag, category } = categoryFields(catKey);
 
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'privatbank', date, amount, currency, desc,
@@ -172,10 +179,18 @@ export function parsePrivatbankCsv(
     const date = parsePrivatDate(dateStr);
     const self = isSelfTransfer(desc, undefined, undefined, ctx);
     const type: UnifiedTransaction['type'] = self ? 'transfer' : (cardAmount >= 0 ? 'income' : 'expense');
-    const tag = self
-      ? 'self_transfer'
-      : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
-    const category = autoDetectCategory(undefined, desc, tag, bankCat || undefined, ownIbans);
+    const catKey = resolveImportCategory({
+      description: desc,
+      bankCategory: bankCat || undefined,
+      ownIbans,
+      ownAccounts,
+      amount,
+      platform: 'privatbank',
+      type,
+      currency,
+      selfTransfer: self,
+    });
+    const { tag, category } = categoryFields(catKey);
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'privatbank', date, amount, currency, desc,
     );

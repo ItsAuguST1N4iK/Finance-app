@@ -53,6 +53,7 @@ export interface Translations {
   analyticsLastYear: string;
   analyticsAll: string;
   analyticsCustom: string;
+  analyticsClearFilter: string;
   analyticsIncome: string;
   analyticsExpenses: string;
   analyticsFees: string;
@@ -164,6 +165,9 @@ export interface Translations {
 
   txDetail: string;
   txAccount: string;
+  txDescription: string;
+  txCategory: string;
+  txPlatform: string;
   txExactDate: string;
   txMcc: string;
 
@@ -255,6 +259,54 @@ export interface Translations {
   settingsResetSettingsHint: string;
   settingsResetSettingsConfirm: string;
   settingsDanger: string;
+
+  settingsAnimSpeed: string;
+  settingsAnimSpeedHint: string;
+  settingsTransparency: string;
+  settingsTransparencyHint: string;
+  settingsTransparencyPreview: string;
+  settingsTransparencyPreviewHint: string;
+
+  analyticsExcludeSelfTransfers: string;
+  analyticsIncludeSelfTransfers: string;
+
+  dateConfirmYear: string;
+  dateConfirmMonth: string;
+  dateConfirmDay: string;
+
+  settingsAddAccount: string;
+  settingsAddAccountName: string;
+  settingsPlatform: string;
+  settingsCategoryRules: string;
+  settingsCategoryRulesHint: string;
+  settingsAddRule: string;
+  settingsEditRule: string;
+  settingsRuleName: string;
+  settingsRuleNameOptional: string;
+  settingsRuleOptionalHint: string;
+  settingsRuleField: string;
+  settingsRuleOp: string;
+  settingsRuleValue: string;
+  settingsRuleCategory: string;
+  settingsRulePriority: string;
+  ruleFieldMcc: string;
+  ruleFieldDescription: string;
+  ruleFieldAmount: string;
+  ruleFieldPlatform: string;
+  ruleFieldType: string;
+  ruleFieldCurrency: string;
+  ruleOpContains: string;
+  ruleOpEquals: string;
+  ruleOpRegex: string;
+  ruleOpRange: string;
+
+  catFood: string;
+  catTransport: string;
+  catHealth: string;
+  catClothing: string;
+  catSubscriptions: string;
+  catIncome: string;
+  catOther: string;
 }
 
 const uk: Translations = {
@@ -264,7 +316,7 @@ const uk: Translations = {
   tabAnalytics: 'Аналітика',
   tabSettings: 'Налаштування',
 
-  dashTotalBalance: 'Загальний баланс (UAH)',
+  dashTotalBalance: 'Загальний баланс',
   dashAccounts: 'Рахунки',
   dashAddAccounts: 'Додайте рахунки у Налаштуваннях',
   dashUpcoming: 'Очікувані надходження',
@@ -302,7 +354,8 @@ const uk: Translations = {
   analyticsThisYear: 'Цей рік',
   analyticsLastYear: 'Мин. рік',
   analyticsAll: 'Весь час',
-  analyticsCustom: 'Довільний',
+  analyticsCustom: 'Власний',
+  analyticsClearFilter: 'Скинути',
   analyticsIncome: 'Доходи',
   analyticsExpenses: 'Витрати',
   analyticsFees: 'Комісії',
@@ -405,7 +458,7 @@ const uk: Translations = {
   tagLabel: 'Тег',
   tagNoTag: 'Без тегу',
   tagEdit: 'Змінити тег',
-  tagSearch: 'Пошук за тегом',
+  tagSearch: 'Категорія',
   tagEntertainment: 'Розваги',
   tagUtilities: 'Побут',
   tagElectronics: 'Електротехніка',
@@ -415,6 +468,9 @@ const uk: Translations = {
 
   txDetail: 'Деталі транзакції',
   txAccount: 'Рахунок',
+  txDescription: 'Опис',
+  txCategory: 'Категорія',
+  txPlatform: 'Платформа',
   txExactDate: 'Дата та час',
   txMcc: 'MCC код',
 
@@ -504,6 +560,54 @@ const uk: Translations = {
   settingsResetSettingsHint: 'Повертає всі налаштування до заводських',
   settingsResetSettingsConfirm: 'Це видалить мову, тему, валюти та API-ключі. Продовжити?',
   settingsDanger: 'Небезпечна зона',
+
+  settingsAnimSpeed: 'Швидкість анімацій',
+  settingsAnimSpeedHint: 'Повільніше ← → швидше',
+  settingsTransparency: 'Прозорість',
+  settingsTransparencyHint: '0% — непрозоро, 100% — максимальна прозорість',
+  settingsTransparencyPreview: 'Приклад панелі',
+  settingsTransparencyPreviewHint: 'Так виглядатимуть картки та секції',
+
+  analyticsExcludeSelfTransfers: 'Виключати перекази між власними рахунками',
+  analyticsIncludeSelfTransfers: 'Враховувати перекази між власними рахунками',
+
+  dateConfirmYear: 'Підтвердити рік',
+  dateConfirmMonth: 'Підтвердити місяць',
+  dateConfirmDay: 'Підтвердити дату',
+
+  settingsAddAccount: 'Додати картку',
+  settingsAddAccountName: 'Назва рахунку',
+  settingsPlatform: 'Платформа',
+  settingsCategoryRules: 'Правила категорій',
+  settingsCategoryRulesHint: 'Автовизначення категорії за MCC, описом, сумою та платформою',
+  settingsAddRule: 'Додати правило',
+  settingsEditRule: 'Редагувати правило',
+  settingsRuleName: 'Назва правила',
+  settingsRuleNameOptional: 'Необовʼязково — згенерується автоматично',
+  settingsRuleOptionalHint: 'Заповніть поле, умову, значення та категорію. Назва та пріоритет — необовʼязкові.',
+  settingsRuleField: 'Поле',
+  settingsRuleOp: 'Умова',
+  settingsRuleValue: 'Значення',
+  settingsRuleCategory: 'Категорія',
+  settingsRulePriority: 'Пріоритет',
+  ruleFieldMcc: 'MCC',
+  ruleFieldDescription: 'Опис',
+  ruleFieldAmount: 'Сума',
+  ruleFieldPlatform: 'Платформа',
+  ruleFieldType: 'Тип',
+  ruleFieldCurrency: 'Валюта',
+  ruleOpContains: 'містить',
+  ruleOpEquals: 'дорівнює',
+  ruleOpRegex: 'regex',
+  ruleOpRange: 'діапазон',
+
+  catFood: 'Продукти',
+  catTransport: 'Транспорт',
+  catHealth: 'Здоров\'я',
+  catClothing: 'Одяг',
+  catSubscriptions: 'Підписки',
+  catIncome: 'Надходження',
+  catOther: 'Інше',
 };
 
 const en: Translations = {
@@ -513,7 +617,7 @@ const en: Translations = {
   tabAnalytics: 'Analytics',
   tabSettings: 'Settings',
 
-  dashTotalBalance: 'Total Balance (UAH)',
+  dashTotalBalance: 'Total Balance',
   dashAccounts: 'Accounts',
   dashAddAccounts: 'Add accounts in Settings',
   dashUpcoming: 'Upcoming Income',
@@ -552,6 +656,7 @@ const en: Translations = {
   analyticsLastYear: 'Last Year',
   analyticsAll: 'All Time',
   analyticsCustom: 'Custom',
+  analyticsClearFilter: 'Clear',
   analyticsIncome: 'Income',
   analyticsExpenses: 'Expenses',
   analyticsFees: 'Fees',
@@ -654,7 +759,7 @@ const en: Translations = {
   tagLabel: 'Tag',
   tagNoTag: 'No tag',
   tagEdit: 'Edit tag',
-  tagSearch: 'Search by tag',
+  tagSearch: 'Category',
   tagEntertainment: 'Entertainment',
   tagUtilities: 'Utilities',
   tagElectronics: 'Electronics',
@@ -664,6 +769,9 @@ const en: Translations = {
 
   txDetail: 'Transaction Details',
   txAccount: 'Account',
+  txDescription: 'Description',
+  txCategory: 'Category',
+  txPlatform: 'Platform',
   txExactDate: 'Date & Time',
   txMcc: 'MCC code',
 
@@ -753,6 +861,54 @@ const en: Translations = {
   settingsResetSettingsHint: 'Restores all settings to factory defaults',
   settingsResetSettingsConfirm: 'This will delete your language, theme, currencies and API keys. Continue?',
   settingsDanger: 'Danger Zone',
+
+  settingsAnimSpeed: 'Animation speed',
+  settingsAnimSpeedHint: 'Slower ← → faster',
+  settingsTransparency: 'Transparency',
+  settingsTransparencyHint: '0% — opaque, 100% — maximum transparency',
+  settingsTransparencyPreview: 'Panel preview',
+  settingsTransparencyPreviewHint: 'How cards and sections will look',
+
+  analyticsExcludeSelfTransfers: 'Exclude transfers between own accounts',
+  analyticsIncludeSelfTransfers: 'Include transfers between own accounts',
+
+  dateConfirmYear: 'Confirm year',
+  dateConfirmMonth: 'Confirm month',
+  dateConfirmDay: 'Confirm date',
+
+  settingsAddAccount: 'Add account',
+  settingsAddAccountName: 'Account name',
+  settingsPlatform: 'Platform',
+  settingsCategoryRules: 'Category rules',
+  settingsCategoryRulesHint: 'Auto-detect category by MCC, description, amount and platform',
+  settingsAddRule: 'Add rule',
+  settingsEditRule: 'Edit rule',
+  settingsRuleName: 'Rule name',
+  settingsRuleNameOptional: 'Optional — auto-generated if empty',
+  settingsRuleOptionalHint: 'Set field, condition, value and category. Name and priority are optional.',
+  settingsRuleField: 'Field',
+  settingsRuleOp: 'Condition',
+  settingsRuleValue: 'Value',
+  settingsRuleCategory: 'Category',
+  settingsRulePriority: 'Priority',
+  ruleFieldMcc: 'MCC',
+  ruleFieldDescription: 'Description',
+  ruleFieldAmount: 'Amount',
+  ruleFieldPlatform: 'Platform',
+  ruleFieldType: 'Type',
+  ruleFieldCurrency: 'Currency',
+  ruleOpContains: 'contains',
+  ruleOpEquals: 'equals',
+  ruleOpRegex: 'regex',
+  ruleOpRange: 'range',
+
+  catFood: 'Food',
+  catTransport: 'Transport',
+  catHealth: 'Health',
+  catClothing: 'Clothing',
+  catSubscriptions: 'Subscriptions',
+  catIncome: 'Income',
+  catOther: 'Other',
 };
 
 export const TRANSLATIONS: Record<Language, Translations> = { uk, en };

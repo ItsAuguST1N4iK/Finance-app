@@ -10,10 +10,11 @@ interface AccountsState {
   addAccount: (account: Omit<Account, 'id' | 'createdAt'>) => void;
   updateBalance: (accountId: string, balance: number) => void;
   updateDisplay: (accountId: string, displayName: string, color?: string) => void;
+  updateAccount: (accountId: string, patch: { displayName?: string; color?: string; currency?: string; name?: string }) => void;
   deactivateAccount: (accountId: string) => void;
 }
 
-export const useAccountsStore = create<AccountsState>((set) => ({
+export const useAccountsStore = create<AccountsState>((set, get) => ({
   accounts: [],
   isLoading: false,
 
@@ -60,10 +61,11 @@ export const useAccountsStore = create<AccountsState>((set) => ({
     const now = Date.now();
 
     db.runSync(
-      `INSERT INTO accounts (id, platform, name, currency, iban, external_id, balance, is_active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      `INSERT INTO accounts (id, platform, name, currency, iban, external_id, balance, is_active, created_at, display_name, color)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       [id, data.platform, data.name, data.currency, data.iban ?? null,
-       data.externalId ?? null, data.balance ?? null, now]
+       data.externalId ?? null, data.balance ?? null, now,
+       data.displayName ?? data.name, data.color ?? null]
     );
 
     const newAccount: Account = { ...data, id, isActive: true, createdAt: now };
@@ -81,21 +83,34 @@ export const useAccountsStore = create<AccountsState>((set) => ({
   },
 
   updateDisplay: (accountId, displayName, color) => {
+    get().updateAccount(accountId, { displayName, color });
+  },
+
+  updateAccount: (accountId, patch) => {
     const db = getDatabase();
-    if (color !== undefined) {
-      db.runSync(
-        `UPDATE accounts SET display_name = ?, color = ? WHERE id = ?`,
-        [displayName, color, accountId]
-      );
-    } else {
-      db.runSync(
-        `UPDATE accounts SET display_name = ? WHERE id = ?`,
-        [displayName, accountId]
-      );
-    }
+    const sets: string[] = [];
+    const vals: (string | number)[] = [];
+
+    if (patch.displayName !== undefined) { sets.push('display_name = ?'); vals.push(patch.displayName); }
+    if (patch.color !== undefined)       { sets.push('color = ?'); vals.push(patch.color); }
+    if (patch.currency !== undefined)    { sets.push('currency = ?'); vals.push(patch.currency); }
+    if (patch.name !== undefined)        { sets.push('name = ?'); vals.push(patch.name); }
+
+    if (sets.length === 0) return;
+    vals.push(accountId);
+    db.runSync(`UPDATE accounts SET ${sets.join(', ')} WHERE id = ?`, vals);
+
     set((state) => ({
       accounts: state.accounts.map((a) =>
-        a.id === accountId ? { ...a, displayName, ...(color !== undefined ? { color } : {}) } : a
+        a.id === accountId
+          ? {
+              ...a,
+              ...(patch.displayName !== undefined ? { displayName: patch.displayName } : {}),
+              ...(patch.color !== undefined ? { color: patch.color } : {}),
+              ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
+              ...(patch.name !== undefined ? { name: patch.name } : {}),
+            }
+          : a,
       ),
     }));
   },

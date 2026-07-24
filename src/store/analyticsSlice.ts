@@ -10,11 +10,13 @@ import {
   formatDayLabel,
   formatMonthLabel,
   formatQuarterLabel,
+  formatMonthYearLabel,
   yearLabelForBar,
 } from '../utils/chartLabels';
 import {
   pickChartGranularity,
-  yearsPerMultiYearBar,
+  yearsPerBarForGranularity,
+  trimEmptyEdges,
   type ChartGranularity,
 } from '../utils/chartGranularity';
 
@@ -22,6 +24,7 @@ export interface ChartBar {
   label: string;
   year: number;
   yearLabel?: string;
+  periodLabel?: string;
   income: number;
   expense: number;
 }
@@ -76,8 +79,8 @@ export function presetToDates(preset: AnalyticsFilters['periodPreset']): { dateF
   }
 }
 
-function isAnalyticsTx(tx: RawTx): boolean {
-  if (tx.tag === 'self_transfer') return false;
+function isAnalyticsTx(tx: RawTx, excludeSelfTransfers: boolean): boolean {
+  if (excludeSelfTransfers && tx.tag === 'self_transfer') return false;
   if (tx.type === 'transfer') return false;
   return tx.type === 'income' || tx.type === 'expense';
 }
@@ -106,12 +109,13 @@ function aggregateTxs(
   rangeEnd: Date,
   keyFn: (d: Date) => string,
   labelFn: (d: Date) => string,
+  excludeSelfTransfers: boolean,
 ): Record<string, ChartBar> {
   const rates = useExchangeRatesStore.getState().rates;
   const map: Record<string, ChartBar> = {};
 
   for (const tx of txs) {
-    if (!isAnalyticsTx(tx)) continue;
+    if (!isAnalyticsTx(tx, excludeSelfTransfers)) continue;
     const txDate = new Date(tx.transaction_date);
     if (txDate < rangeStart || txDate > rangeEnd) continue;
     const key = keyFn(txDate);
@@ -130,6 +134,7 @@ function buildDailyBarsFromTxs(
   homeCurrency: string,
   dateFrom: number,
   dateTo: number,
+  excludeSelfTransfers: boolean,
 ): ChartBar[] {
   const rangeStart = new Date(dateFrom);
   const rangeEnd   = new Date(dateTo);
@@ -139,6 +144,7 @@ function buildDailyBarsFromTxs(
   const map = aggregateTxs(txs, homeCurrency, rangeStart, visualEnd,
     (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`,
     (d) => formatDayLabel(d.getDate()),
+    excludeSelfTransfers,
   );
 
   const sameMonth = rangeStart.getFullYear() === visualEnd.getFullYear()
@@ -165,6 +171,7 @@ function buildMonthlyBarsFromTxs(
   homeCurrency: string,
   dateFrom: number,
   dateTo: number,
+  excludeSelfTransfers: boolean,
 ): ChartBar[] {
   const rangeStart = new Date(dateFrom);
   const rangeEnd   = new Date(dateTo);
@@ -174,6 +181,7 @@ function buildMonthlyBarsFromTxs(
   const map = aggregateTxs(txs, homeCurrency, rangeStart, visualEnd,
     (d) => `${d.getFullYear()}-${d.getMonth()}`,
     (d) => formatMonthLabel(d.getMonth()),
+    excludeSelfTransfers,
   );
 
   const startIdx = rangeStart.getFullYear() * 12 + rangeStart.getMonth();
@@ -188,7 +196,13 @@ function buildMonthlyBarsFromTxs(
     const key   = `${year}-${month}`;
     const yearLabel = spansYears ? yearLabelForBar(year, prevYear) : undefined;
     if (yearLabel) prevYear = year;
-    bars.push(map[key] ?? { label: formatMonthLabel(month), year, yearLabel, income: 0, expense: 0 });
+    const existing = map[key];
+    bars.push({
+      ...(existing ?? { label: formatMonthLabel(month), income: 0, expense: 0 }),
+      year,
+      yearLabel,
+      periodLabel: formatMonthYearLabel(month, year),
+    });
   }
   return bars;
 }
@@ -198,6 +212,7 @@ function buildQuarterlyBarsFromTxs(
   homeCurrency: string,
   dateFrom: number,
   dateTo: number,
+  excludeSelfTransfers: boolean,
 ): ChartBar[] {
   const rangeStart = new Date(dateFrom);
   const rangeEnd   = new Date(dateTo);
@@ -207,6 +222,7 @@ function buildQuarterlyBarsFromTxs(
   const map = aggregateTxs(txs, homeCurrency, rangeStart, visualEnd,
     (d) => `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`,
     (d) => formatQuarterLabel(Math.floor(d.getMonth() / 3) + 1),
+    excludeSelfTransfers,
   );
 
   const startQ = rangeStart.getFullYear() * 4 + Math.floor(rangeStart.getMonth() / 3);
@@ -227,6 +243,7 @@ function buildYearlyBarsFromTxs(
   homeCurrency: string,
   dateFrom: number,
   dateTo: number,
+  excludeSelfTransfers: boolean,
 ): ChartBar[] {
   const rangeStart = new Date(dateFrom);
   const rangeEnd   = new Date(dateTo);
@@ -236,6 +253,7 @@ function buildYearlyBarsFromTxs(
   const map = aggregateTxs(txs, homeCurrency, rangeStart, visualEnd,
     (d) => String(d.getFullYear()),
     (d) => String(d.getFullYear()),
+    excludeSelfTransfers,
   );
 
   const bars: ChartBar[] = [];
@@ -252,6 +270,7 @@ function buildMultiYearBarsFromTxs(
   dateFrom: number,
   dateTo: number,
   yearsPerBar: number,
+  excludeSelfTransfers: boolean,
 ): ChartBar[] {
   const rangeStart = new Date(dateFrom);
   const rangeEnd   = new Date(dateTo);
@@ -268,6 +287,7 @@ function buildMultiYearBarsFromTxs(
       const endY = Math.min(bucket + yearsPerBar - 1, visualEnd.getFullYear());
       return bucket === endY ? String(bucket) : `${bucket}–${endY}`;
     },
+    excludeSelfTransfers,
   );
 
   const startBucket = Math.floor(rangeStart.getFullYear() / yearsPerBar) * yearsPerBar;
@@ -283,39 +303,64 @@ function buildMultiYearBarsFromTxs(
   return bars;
 }
 
+function getDataBoundedRange(
+  txs: RawTx[],
+  homeCurrency: string,
+  excludeSelfTransfers: boolean,
+): { dateFrom: number; dateTo: number } | null {
+  const rates = useExchangeRatesStore.getState().rates;
+  let minD: number | null = null;
+  let maxD: number | null = null;
+
+  for (const tx of txs) {
+    if (!isAnalyticsTx(tx, excludeSelfTransfers)) continue;
+    const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+    if (converted <= 0) continue;
+    if (minD === null || tx.transaction_date < minD) minD = tx.transaction_date;
+    if (maxD === null || tx.transaction_date > maxD) maxD = tx.transaction_date;
+  }
+  if (minD === null || maxD === null) return null;
+  return { dateFrom: minD, dateTo: maxD };
+}
+
 function buildChartBars(
   txs: RawTx[],
   homeCurrency: string,
   dateFrom: number,
   dateTo: number,
-  periodPreset: AnalyticsFilters['periodPreset'],
-  chartWidth: number,
+  excludeSelfTransfers: boolean,
 ): { bars: ChartBar[]; granularity: ChartGranularity } {
-  const granularity = pickChartGranularity(periodPreset, dateFrom, dateTo, chartWidth);
-  const start = new Date(dateFrom);
-  const end   = new Date(dateTo);
-  const yearSpan = end.getFullYear() - start.getFullYear() + 1;
-  const yearsPerBar = yearsPerMultiYearBar(yearSpan, chartWidth);
+  const dataBounds = getDataBoundedRange(txs, homeCurrency, excludeSelfTransfers);
+  const effectiveFrom = dataBounds ? Math.max(dateFrom, dataBounds.dateFrom) : dateFrom;
+  const effectiveTo   = dataBounds ? Math.min(dateTo, dataBounds.dateTo) : dateTo;
+
+  if (effectiveFrom > effectiveTo) {
+    return { bars: [], granularity: 'monthly' };
+  }
+
+  const granularity = pickChartGranularity(effectiveFrom, effectiveTo);
+  const yearsPerBar = yearsPerBarForGranularity(granularity);
 
   let bars: ChartBar[] = [];
   switch (granularity) {
     case 'daily':
-      bars = buildDailyBarsFromTxs(txs, homeCurrency, dateFrom, dateTo);
+      bars = buildDailyBarsFromTxs(txs, homeCurrency, effectiveFrom, effectiveTo, excludeSelfTransfers);
       break;
     case 'monthly':
-      bars = buildMonthlyBarsFromTxs(txs, homeCurrency, dateFrom, dateTo);
+      bars = buildMonthlyBarsFromTxs(txs, homeCurrency, effectiveFrom, effectiveTo, excludeSelfTransfers);
       break;
     case 'quarterly':
-      bars = buildQuarterlyBarsFromTxs(txs, homeCurrency, dateFrom, dateTo);
+      bars = buildQuarterlyBarsFromTxs(txs, homeCurrency, effectiveFrom, effectiveTo, excludeSelfTransfers);
       break;
     case 'yearly':
-      bars = buildYearlyBarsFromTxs(txs, homeCurrency, dateFrom, dateTo);
+      bars = buildYearlyBarsFromTxs(txs, homeCurrency, effectiveFrom, effectiveTo, excludeSelfTransfers);
       break;
-    case 'multi_year':
-      bars = buildMultiYearBarsFromTxs(txs, homeCurrency, dateFrom, dateTo, yearsPerBar);
+    case 'multi_year_5':
+    case 'multi_year_10':
+      bars = buildMultiYearBarsFromTxs(txs, homeCurrency, effectiveFrom, effectiveTo, yearsPerBar, excludeSelfTransfers);
       break;
   }
-  return { bars, granularity };
+  return { bars: trimEmptyEdges(bars), granularity };
 }
 
 const defaultFilters: AnalyticsFilters = {
@@ -326,7 +371,7 @@ const defaultFilters: AnalyticsFilters = {
   excludeSelfTransfers: true,
 };
 
-let lastChartWidth = 360;
+let lastChartWidth = 360; // reserved for future responsive tweaks
 
 export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
   summary: [],
@@ -407,11 +452,13 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
       const accountShareMap = new Map<string, { income: number; expense: number }>();
       const categoryMap = new Map<string, { total: number; txCount: number }>();
 
+      const excludeSelf = filters.excludeSelfTransfers !== false;
+
       for (const tx of rawTxs) {
         const feeCur = tx.fee_currency ?? tx.currency;
         const feeConverted = convertToHomeCurrency(tx.fee_amount ?? 0, feeCur, homeCurrency, rates);
 
-        if (isAnalyticsTx(tx)) {
+        if (isAnalyticsTx(tx, excludeSelf)) {
           const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
           const period = new Date(tx.transaction_date).toISOString().slice(0, 7);
           const sumKey = `${tx.platform}|${period}`;
@@ -488,7 +535,7 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
         .slice(0, 10);
 
       const { bars, granularity } = buildChartBars(
-        rawTxs, homeCurrency, dateFrom, dateTo, filters.periodPreset, lastChartWidth,
+        rawTxs, homeCurrency, dateFrom, dateTo, excludeSelf,
       );
 
       set({ summary, platformShares, topCategories, chartBars: bars, chartGranularity: granularity, isLoading: false });

@@ -10,11 +10,11 @@ import { useTransactionsStore } from '../store/transactionsSlice';
 import { useAccountsStore } from '../store/accountsSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useTagLabels } from '../hooks/useTagLabels';
+import { useCategoryLabels } from '../hooks/useCategoryLabels';
 import type { UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
-import { ALL_TAGS, TagType } from '../utils/tags';
-import { autoDetectCategory, resolveTransactionCategory } from '../utils/categories';
+import { ALL_CATEGORY_KEYS, type CategoryKey } from '../utils/categoryRegistry';
+import { resolveTransactionCategory } from '../utils/categories';
 
 interface Props {
   item: UnifiedTransaction | null;
@@ -23,12 +23,12 @@ interface Props {
 }
 
 export function TxDetailModal({ item, visible, onClose }: Props) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const { updateTransactionTag } = useTransactionsStore();
   const { accounts } = useAccountsStore();
-  const tagLabels = useTagLabels();
-  const [showTagPicker, setShowTagPicker] = useState(false);
+  const categoryLabels = useCategoryLabels();
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
   if (!item) return null;
 
@@ -37,23 +37,19 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
   const amtColor = tx.type === 'income' ? theme.income : tx.type === 'expense' ? theme.expense : theme.subtext;
   const account  = accounts.find((a) => a.id === tx.accountId);
   const accountLabel = account ? (account.displayName ?? account.name) : tx.accountId;
-  const categoryLabel = resolveTransactionCategory(tx);
+  const categoryKey = resolveTransactionCategory(tx);
+  const categoryLabel = categoryLabels[categoryKey] ?? categoryKey;
 
-  function handleTagSelect(tag: TagType | null) {
-    const category = tag
-      ? autoDetectCategory(tx.mcc, tx.description, tag)
-      : tx.category;
-    updateTransactionTag(tx.id, tag, category);
-    setShowTagPicker(false);
+  function handleCategorySelect(key: CategoryKey | null) {
+    updateTransactionTag(tx.id, key, key ?? tx.category);
+    setShowCategoryPicker(false);
   }
-
-  const tagLabel = tx.tag ? (tagLabels[tx.tag] ?? tx.tag) : t.tagNoTag;
 
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-          <View style={[styles.sheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[styles.sheet, cardSurface(), { borderColor: theme.border }]}>
             <View style={styles.header}>
               <Text style={[styles.title, { color: theme.text }]}>{t.txDetail}</Text>
               <TouchableOpacity onPress={onClose} activeOpacity={0.75}>
@@ -73,15 +69,45 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
 
               {tx.description && (
                 <View style={[styles.row, { borderBottomColor: theme.border }]}>
-                  <Text style={[styles.rowLabel, { color: theme.subtext }]}>Опис</Text>
+                  <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.txDescription}</Text>
                   <Text style={[styles.rowValue, { color: theme.text }]}>{tx.description}</Text>
                 </View>
               )}
 
               <View style={[styles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.rowLabel, { color: theme.subtext }]}>Категорія</Text>
-                <Text style={[styles.rowValue, { color: theme.text }]}>{categoryLabel}</Text>
+                <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.txCategory}</Text>
+                <TouchableOpacity
+                  style={[styles.tagChip, {
+                    backgroundColor: categoryKey !== 'other' ? theme.accent + '22' : theme.cardAlt,
+                    borderColor: categoryKey !== 'other' ? theme.accent : theme.border,
+                  }]}
+                  onPress={() => setShowCategoryPicker((v) => !v)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.tagChipText, { color: categoryKey !== 'other' ? theme.accent : theme.subtext }]}>
+                    {categoryLabel}
+                  </Text>
+                  <Ionicons name="pencil-outline" size={12} color={categoryKey !== 'other' ? theme.accent : theme.subtext} />
+                </TouchableOpacity>
               </View>
+
+              {showCategoryPicker && (
+                <View style={[styles.tagPickerBox, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
+                  {ALL_CATEGORY_KEYS.map((key) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.tagOption, { borderColor: theme.border }, categoryKey === key && { backgroundColor: theme.accent + '22' }]}
+                      onPress={() => handleCategorySelect(key)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.tagOptionText, { color: categoryKey === key ? theme.accent : theme.text }]}>
+                        {categoryLabels[key]}
+                      </Text>
+                      {categoryKey === key && <Ionicons name="checkmark" size={14} color={theme.accent} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
               <View style={[styles.row, { borderBottomColor: theme.border }]}>
                 <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.txAccount}</Text>
@@ -101,7 +127,7 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
               </View>
 
               <View style={[styles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.rowLabel, { color: theme.subtext }]}>Платформа</Text>
+                <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.txPlatform}</Text>
                 <Text style={[styles.rowValue, { color: theme.accent }]}>{tx.platform}</Text>
               </View>
 
@@ -111,50 +137,6 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
                   <Text style={[styles.rowValue, { color: theme.warning }]}>
                     {tx.feeAmount.toLocaleString('uk-UA')} {tx.feeCurrency ?? tx.currency}
                   </Text>
-                </View>
-              )}
-
-              <View style={[styles.row, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.tagLabel}</Text>
-                <TouchableOpacity
-                  style={[styles.tagChip, {
-                    backgroundColor: tx.tag ? theme.accent + '22' : theme.cardAlt,
-                    borderColor: tx.tag ? theme.accent : theme.border,
-                  }]}
-                  onPress={() => setShowTagPicker(true)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.tagChipText, { color: tx.tag ? theme.accent : theme.subtext }]}>
-                    {tagLabel}
-                  </Text>
-                  <Ionicons name="pencil-outline" size={12} color={tx.tag ? theme.accent : theme.subtext} />
-                </TouchableOpacity>
-              </View>
-
-              {showTagPicker && (
-                <View style={[styles.tagPickerBox, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
-                  <TouchableOpacity
-                    style={[styles.tagOption, { borderColor: theme.border }, !tx.tag && { backgroundColor: theme.accent + '22' }]}
-                    onPress={() => handleTagSelect(null)}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.tagOptionText, { color: !tx.tag ? theme.accent : theme.subtext }]}>
-                      {t.tagNoTag}
-                    </Text>
-                  </TouchableOpacity>
-                  {ALL_TAGS.map((tag) => (
-                    <TouchableOpacity
-                      key={tag}
-                      style={[styles.tagOption, { borderColor: theme.border }, tx.tag === tag && { backgroundColor: theme.accent + '22' }]}
-                      onPress={() => handleTagSelect(tag)}
-                      activeOpacity={0.75}
-                    >
-                      <Text style={[styles.tagOptionText, { color: tx.tag === tag ? theme.accent : theme.text }]}>
-                        {tagLabels[tag] ?? tag}
-                      </Text>
-                      {tx.tag === tag && <Ionicons name="checkmark" size={14} color={theme.accent} />}
-                    </TouchableOpacity>
-                  ))}
                 </View>
               )}
             </ScrollView>

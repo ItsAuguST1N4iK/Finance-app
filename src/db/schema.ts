@@ -87,6 +87,45 @@ export const SCHEMA_V7 = `
   CREATE INDEX IF NOT EXISTS idx_tx_tag          ON transactions(tag);
 `;
 
+export const SCHEMA_V9 = `
+  CREATE TABLE IF NOT EXISTS category_rules (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    category_key TEXT NOT NULL,
+    priority     INTEGER NOT NULL DEFAULT 0,
+    match_field  TEXT NOT NULL CHECK (match_field IN ('mcc','description','amount','platform','type')),
+    match_op     TEXT NOT NULL CHECK (match_op IN ('contains','equals','regex','range')),
+    match_value  TEXT NOT NULL,
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_cat_rules_prio ON category_rules(priority DESC);
+`;
+
+export const SCHEMA_V10 = `
+  CREATE TABLE IF NOT EXISTS category_rules_new (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    category_key TEXT NOT NULL,
+    priority     INTEGER NOT NULL DEFAULT 0,
+    match_field  TEXT NOT NULL,
+    match_op     TEXT NOT NULL,
+    match_value  TEXT NOT NULL,
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at   INTEGER NOT NULL
+  );
+  INSERT INTO category_rules_new SELECT * FROM category_rules;
+  DROP TABLE category_rules;
+  ALTER TABLE category_rules_new RENAME TO category_rules;
+  CREATE INDEX IF NOT EXISTS idx_cat_rules_prio ON category_rules(priority DESC);
+`;
+
+export const SCHEMA_V8 = `
+  ALTER TABLE settings ADD COLUMN animation_speed REAL DEFAULT 1.0;
+  ALTER TABLE settings ADD COLUMN glass_opacity   REAL DEFAULT 0.72;
+  ALTER TABLE settings ADD COLUMN liquid_glass    INTEGER DEFAULT 1;
+`;
+
 export const SCHEMA_V1 = `
   -- Версіювання схеми (для майбутніх міграцій)
   CREATE TABLE IF NOT EXISTS _schema_version (

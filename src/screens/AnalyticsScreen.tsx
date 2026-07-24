@@ -1,24 +1,30 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, useWindowDimensions, RefreshControl,
+  TouchableOpacity, useWindowDimensions, RefreshControl, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Svg, Rect, Text as SvgText, Line, Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnalyticsStore, ChartBar } from '../store/analyticsSlice';
-import { computeYearBands } from '../utils/chartGranularity';
+import { computeYearBands, computePerBarBands, isYearGranularity, type ChartGranularity } from '../utils/chartGranularity';
+import { formatMonthYearLabel } from '../utils/chartLabels';
 import { useExchangeRatesStore } from '../store/exchangeRatesSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { DatePickerModal } from '../components/DatePickerModal';
 import { currencySymbol } from '../utils/currency';
+import { useCategoryLabel } from '../hooks/useCategoryLabels';
 import type { AnalyticsFilters } from '../types';
 
 type PeriodPreset = NonNullable<AnalyticsFilters['periodPreset']>;
 
-// ─── KPI Cards ───────────────────────────────────────
+function CategoryRowName({ categoryKey }: { categoryKey: string }) {
+  const { theme } = useTheme();
+  const label = useCategoryLabel(categoryKey);
+  return <Text style={[styles.catName, { color: theme.text }]}>{label}</Text>;
+}
 
 interface KpiData {
   label: string;
@@ -29,15 +35,16 @@ interface KpiData {
 }
 
 function KpiCards({ items }: { items: KpiData[] }) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
+  const surface = cardSurface();
   return (
     <View style={kpiStyles.row}>
       {items.map((item, idx) => (
         <View
           key={idx}
-          style={[kpiStyles.card, {
-            backgroundColor: theme.card,
+          style={[kpiStyles.card, surface, {
             borderLeftColor: item.color,
+            borderLeftWidth: 3,
           }]}
         >
           <View style={kpiStyles.cardTop}>
@@ -60,7 +67,7 @@ function KpiCards({ items }: { items: KpiData[] }) {
 
 const kpiStyles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, gap: 8, marginBottom: 12 },
-  card: { flexBasis: '47%', flexGrow: 1, borderRadius: 14, padding: 14, borderLeftWidth: 3 },
+  card: { flexBasis: '47%', flexGrow: 1, borderRadius: 14, padding: 14 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   label:   { fontSize: 12, fontWeight: '500' },
   iconWrap: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
@@ -95,10 +102,12 @@ function smoothBezierPath(pts: Array<{ x: number; y: number }>): string {
 
 // ─── Dual Bar Chart (income + expense) ───────────────
 
-function BarChart({ bars, subTextColor, width }: {
+function BarChart({ bars, subTextColor, width, granularity, periodFooter }: {
   bars: ChartBar[];
   subTextColor: string;
   width: number;
+  granularity: ChartGranularity;
+  periodFooter?: string;
 }) {
   const { theme } = useTheme();
   if (bars.length === 0) return null;
@@ -114,8 +123,14 @@ function BarChart({ bars, subTextColor, width }: {
   const yearBandH = 16;
   const yearBandY = height - yearBandH - 2;
 
-  const yearBands = computeYearBands(bars);
-  const showYearBands = yearBands.length > 1 || (yearBands.length === 1 && bars.length > 4);
+  const yearMode = isYearGranularity(granularity);
+  const monthMode = granularity === 'monthly';
+  const bandMode = yearMode || monthMode;
+  const yearBands = bandMode ? computePerBarBands(bars) : computeYearBands(bars);
+  const showYearBands = bandMode
+    ? yearBands.length > 0
+    : yearBands.length > 1 || (yearBands.length === 1 && bars.length > 4);
+  const hideTextLabels = bandMode;
 
   const maxVal = Math.max(...bars.map((b) => Math.max(b.income, b.expense)), 1);
 
@@ -124,7 +139,7 @@ function BarChart({ bars, subTextColor, width }: {
     val: (maxVal * frac),
   }));
 
-  const minGroupW = 28;
+  const minGroupW = monthMode ? 34 : 28;
   const showEvery = bars.length * minGroupW > chartW
     ? Math.ceil((bars.length * minGroupW) / chartW / 2)
     : bars.length > 20
@@ -170,7 +185,7 @@ function BarChart({ bars, subTextColor, width }: {
         const centerX   = groupX + (groupW - barW * 2 - gap) / 2;
         const incomeX   = centerX;
         const expenseX  = centerX + barW + gap;
-        const showLabel = i % showEvery === 0;
+        const showLabel = !hideTextLabels && i % showEvery === 0;
 
         return (
           <React.Fragment key={i}>
@@ -218,11 +233,11 @@ function BarChart({ bars, subTextColor, width }: {
             <SvgText
               x={cx}
               y={yearBandY + yearBandH - 3}
-              fontSize={11}
+              fontSize={yearMode ? 9 : 11}
               fill={theme.accent}
               textAnchor="middle"
             >
-              {band.year}
+              {band.label ?? band.year}
             </SvgText>
           </React.Fragment>
         );
@@ -235,6 +250,16 @@ function BarChart({ bars, subTextColor, width }: {
       {expensePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
         <Line key={`ed${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.expense} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
       ))}
+      {periodFooter && !showYearBands && (
+        <React.Fragment>
+          <Rect x={padL + 1} y={yearBandY} width={chartW - 2} height={yearBandH}
+            fill={theme.accent} opacity={0.28} rx={3} />
+          <Line x1={padL + 1} y1={yearBandY} x2={width - padR - 1} y2={yearBandY}
+            stroke={theme.accent} strokeWidth={2} />
+          <SvgText x={width / 2} y={yearBandY + yearBandH - 3} fontSize={10}
+            fill={theme.accent} textAnchor="middle">{periodFooter}</SvgText>
+        </React.Fragment>
+      )}
       <Line x1={padL} y1={baseline} x2={width - padR} y2={baseline}
         stroke={subTextColor} strokeWidth={0.6} opacity={0.4} />
     </Svg>
@@ -348,6 +373,7 @@ function PresetBtn({ label, active, onPress }: {
         active && { backgroundColor: theme.accent, borderColor: theme.accent }]}
       onPress={onPress}
       activeOpacity={0.75}
+      hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
     >
       <Text style={[pStyles.label, { color: active ? '#fff' : theme.subtext }]}>
         {label}
@@ -364,12 +390,12 @@ const pStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────
 
 export function AnalyticsScreen() {
-  const { theme }    = useTheme();
-  const { t }        = useLanguage();
+  const { theme, cardSurface } = useTheme();
+  const { t, language } = useLanguage();
   const { width: W } = useWindowDimensions();
   const chartWidth = W - 48;
   const {
-    summary, platformShares, topCategories, chartBars,
+    summary, platformShares, topCategories, chartBars, chartGranularity,
     filters, setFilters, compute, isLoading, homeCurrency, loadHomeCurrency,
   } = useAnalyticsStore();
   const { fetchRates } = useExchangeRatesStore();
@@ -379,6 +405,13 @@ export function AnalyticsScreen() {
   const [customFrom,   setCustomFrom]   = useState<Date | null>(null);
   const [customTo,     setCustomTo]     = useState<Date | null>(null);
   const [refreshing,   setRefreshing]   = useState(false);
+
+  useEffect(() => {
+    if (filters.periodPreset === 'custom') {
+      setCustomFrom(new Date(filters.dateFrom));
+      setCustomTo(new Date(filters.dateTo));
+    }
+  }, [filters.periodPreset, filters.dateFrom, filters.dateTo]);
 
   useEffect(() => {
     loadHomeCurrency();
@@ -406,6 +439,16 @@ export function AnalyticsScreen() {
 
   const currSym = currencySymbol(homeCurrency);
   const currLabel = `${currSym} ${homeCurrency}`;
+
+  const periodFooter = (filters.periodPreset === 'this_month' || filters.periodPreset === 'last_month')
+    ? formatMonthYearLabel(
+        new Date(filters.dateFrom).getMonth(),
+        new Date(filters.dateFrom).getFullYear(),
+        language,
+      )
+    : undefined;
+
+  const excludeSelf = filters.excludeSelfTransfers !== false;
 
   const totals = summary.reduce(
     (acc, s) => ({
@@ -456,13 +499,23 @@ export function AnalyticsScreen() {
   ];
 
   function openCustomRange() {
-    // Reset previous custom dates on each new custom selection
+    if (filters.periodPreset === 'custom' && customFrom && customTo) {
+      return;
+    }
     setCustomFrom(null);
     setCustomTo(null);
     setDateFromOpen(true);
   }
 
+  function clearCustomFilter() {
+    setCustomFrom(null);
+    setCustomTo(null);
+    setFilters({ periodPreset: 'this_month' });
+  }
+
   function applyCustomDates(from: Date, to: Date) {
+    setCustomFrom(from);
+    setCustomTo(to);
     setFilters({
       periodPreset: 'custom',
       dateFrom: from.getTime(),
@@ -520,14 +573,15 @@ export function AnalyticsScreen() {
           {PRESETS.map((p) => (
             <PresetBtn
               key={p.key}
-              label={p.key === 'custom' && filters.periodPreset === 'custom' && customFrom && customTo
-                ? `${customFrom.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' })} – ${customTo.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' })}`
-                : p.label
-              }
+              label={p.label}
               active={filters.periodPreset === p.key}
               onPress={() => {
                 if (p.key === 'custom') {
-                  openCustomRange();
+                  if (filters.periodPreset === 'custom' && customFrom && customTo) {
+                    setFilters({ periodPreset: 'custom' });
+                  } else {
+                    openCustomRange();
+                  }
                 } else {
                   setFilters({ periodPreset: p.key });
                 }
@@ -539,27 +593,48 @@ export function AnalyticsScreen() {
         {/* Custom date range display — edit button */}
         {filters.periodPreset === 'custom' && customFrom && customTo && (
           <View style={[styles.customRange, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Ionicons name="calendar-outline" size={14} color={theme.accent} />
-            <Text style={[styles.customDateText, { color: theme.text, flex: 1 }]}>
-              {customFrom.toLocaleDateString('uk-UA')} → {customTo.toLocaleDateString('uk-UA')}
-            </Text>
             <TouchableOpacity
-              style={[styles.editRangeBtn, { borderColor: theme.border }]}
-              onPress={openCustomRange}
+              onPress={() => setDateFromOpen(true)}
               activeOpacity={0.75}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
-              <Ionicons name="pencil-outline" size={14} color={theme.accent} />
-              <Text style={[styles.editRangeBtnText, { color: theme.accent }]}>Змінити</Text>
+              <Text style={[styles.customDateText, { color: theme.accent, fontWeight: '600' }]}>
+                {customFrom.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.customDateSep, { color: theme.subtext }]}>→</Text>
+            <TouchableOpacity
+              onPress={() => setDateToOpen(true)}
+              activeOpacity={0.75}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <Text style={[styles.customDateText, { color: theme.accent, fontWeight: '600' }]}>
+                {customTo.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={clearCustomFilter}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              style={styles.clearFilterBtn}
+            >
+              <Text style={[styles.clearFilterText, { color: theme.expense }]}>{t.analyticsClearFilter}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Note: stats exclude self-transfers */}
-        <View style={[styles.noteRow, { backgroundColor: theme.card + 'aa', borderColor: theme.border }]}>
-          <Ionicons name="information-circle-outline" size={13} color={theme.subtext} />
-          <Text style={[styles.noteText, { color: theme.subtext }]}>
-            Перекази між власними рахунками виключено · {currLabel}
+        <View style={[styles.noteRow, cardSurface(), { borderColor: theme.border }]}>
+          <Ionicons name="swap-horizontal-outline" size={15} color={theme.subtext} />
+          <Text style={[styles.noteText, { color: theme.subtext, flex: 1 }]}>
+            {excludeSelf ? t.analyticsExcludeSelfTransfers : t.analyticsIncludeSelfTransfers}
           </Text>
+          <Switch
+            value={excludeSelf}
+            onValueChange={(v) => setFilters({ excludeSelfTransfers: v })}
+            trackColor={{ false: theme.border, true: theme.accent + '88' }}
+            thumbColor={excludeSelf ? theme.accent : theme.subtext}
+          />
         </View>
 
         {/* KPI cards */}
@@ -572,8 +647,14 @@ export function AnalyticsScreen() {
               {t.analyticsIncomeAndExpense}
             </Text>
             <ChartLegend />
-            <View style={[styles.chartCard, { backgroundColor: theme.card, width: W - 32 }]}>
-              <BarChart bars={chartBars} subTextColor={theme.subtext} width={chartWidth} />
+            <View style={[styles.chartCard, cardSurface(), { width: W - 32 }]}>
+              <BarChart
+                bars={chartBars}
+                subTextColor={theme.subtext}
+                width={chartWidth}
+                granularity={chartGranularity}
+                periodFooter={periodFooter}
+              />
             </View>
           </View>
         )}
@@ -601,7 +682,7 @@ export function AnalyticsScreen() {
                   <Text style={[styles.catRank, { color: theme.accent }]}>#{i + 1}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.catName, { color: theme.text }]}>{c.category}</Text>
+                  <CategoryRowName categoryKey={c.category} />
                   <Text style={[styles.catCount, { color: theme.subtext }]}>
                     {c.txCount} {t.analyticsTx}
                   </Text>
@@ -630,9 +711,18 @@ export function AnalyticsScreen() {
         maxDate={customTo ?? new Date()}
         onClose={() => setDateFromOpen(false)}
         onConfirm={(d) => {
-          setCustomFrom(d);
           setDateFromOpen(false);
-          setDateToOpen(true);
+          if (customTo && d > customTo) {
+            setCustomFrom(d);
+            setCustomTo(d);
+            applyCustomDates(d, d);
+          } else if (customTo) {
+            setCustomFrom(d);
+            applyCustomDates(d, customTo);
+          } else {
+            setCustomFrom(d);
+            setDateToOpen(true);
+          }
         }}
       />
       {/* Date To picker — validates From < To */}
@@ -643,11 +733,12 @@ export function AnalyticsScreen() {
         minDate={customFrom ?? undefined}
         onClose={() => setDateToOpen(false)}
         onConfirm={(d) => {
-          setCustomTo(d);
           setDateToOpen(false);
-          // Auto-apply immediately when both dates are selected
-          if (customFrom) {
-            applyCustomDates(customFrom, d);
+          const from = customFrom ?? d;
+          if (from > d) {
+            applyCustomDates(d, from);
+          } else {
+            applyCustomDates(from, d);
           }
         }}
       />
@@ -673,11 +764,13 @@ const styles = StyleSheet.create({
   customRange: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginBottom: 10,
-    padding: 10, borderRadius: 12, borderWidth: 1, gap: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 12, borderWidth: 1, gap: 6,
   },
-  customDateText:    { fontSize: 13 },
-  editRangeBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  editRangeBtnText:  { fontSize: 12, fontWeight: '600' },
+  customDateText:    { fontSize: 12 },
+  customDateSep:     { fontSize: 12 },
+  clearFilterBtn:    { marginLeft: 'auto', paddingHorizontal: 4 },
+  clearFilterText:   { fontSize: 11, fontWeight: '700' },
   noteRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginHorizontal: 16, marginBottom: 10,

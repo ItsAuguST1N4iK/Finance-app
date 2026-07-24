@@ -1,13 +1,6 @@
-import { useLanguage } from '../i18n/LanguageContext';
+import { useCategoryLabels } from './useCategoryLabels';
 
+/** @deprecated use useCategoryLabels */
 export function useTagLabels(): Record<string, string> {
-  const { t } = useLanguage();
-  return {
-    entertainment: t.tagEntertainment,
-    utilities:     t.tagUtilities,
-    electronics:   t.tagElectronics,
-    self_transfer: t.tagSelfTransfer,
-    transfer:      t.tagTransfer,
-    top_up:        t.tagTopUp,
-  };
+  return useCategoryLabels();
 }

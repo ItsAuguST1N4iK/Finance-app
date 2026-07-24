@@ -30,9 +30,15 @@ import { getDatabase } from '../db/migrations';
 import { refreshAppData } from '../utils/refreshAppData';
 import { analyzeImportDuplicates, reassignTransactionId } from '../utils/importTransactions';
 import { CardPreview } from '../components/CardPreview';
+import { SettingSlider } from '../components/SettingSlider';
 import { currencySymbol } from '../utils/currency';
 import { retagFromRawPayload } from '../utils/tags';
-import { autoDetectCategory } from '../utils/categories';
+import { autoDetectCategoryKey } from '../utils/categories';
+import { seedDefaultCategoryRules, loadCategoryRules, saveCategoryRule, deleteCategoryRule, buildRuleDisplayName } from '../utils/categoryRules';
+import type { CategoryRule, RuleMatchField, RuleMatchOp } from '../utils/categoryRules';
+import type { CategoryKey } from '../utils/categoryRegistry';
+import { ALL_CATEGORY_KEYS } from '../utils/categoryRegistry';
+import { useCategoryLabels } from '../hooks/useCategoryLabels';
 
 
 const AVAILABLE_CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'PLN', 'CZK', 'CAD', 'AUD', 'JPY'];
@@ -54,25 +60,24 @@ interface SectionProps {
 }
 
 function Section({ title, icon, badge, defaultExpanded = false, children }: SectionProps) {
-  const { theme }   = useTheme();
+  const { theme, dur, cardSurface } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const chevron     = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
   const bodyOpacity = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
+  const surface = cardSurface();
 
   function toggle() {
     const to = expanded ? 0 : 1;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Animated.parallel([
-      Animated.spring(chevron,     { toValue: to, useNativeDriver: true, damping: 18, stiffness: 220 }),
-      Animated.spring(bodyOpacity, { toValue: to, useNativeDriver: true, damping: 18, stiffness: 220 }),
-    ]).start();
+    Animated.timing(bodyOpacity, {
+      toValue: to,
+      duration: dur(220),
+      useNativeDriver: true,
+    }).start();
     setExpanded((v) => !v);
   }
 
-  const chevRot = chevron.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-
   return (
-    <View style={[secS.container, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <View style={[secS.container, surface, { borderColor: theme.border }]}>
       <TouchableOpacity style={secS.header} onPress={toggle} activeOpacity={0.7}>
         <View style={secS.headerLeft}>
           <View style={[secS.iconWrap, { backgroundColor: theme.accent + '22' }]}>
@@ -85,9 +90,7 @@ function Section({ title, icon, badge, defaultExpanded = false, children }: Sect
             </View>
           )}
         </View>
-        <Animated.View style={{ transform: [{ rotate: chevRot }] }}>
-          <Ionicons name="chevron-down" size={18} color={theme.subtext} />
-        </Animated.View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={theme.subtext} />
       </TouchableOpacity>
       {expanded && (
         <Animated.View style={[secS.body, { borderTopColor: theme.border, opacity: bodyOpacity }]}>
@@ -423,25 +426,119 @@ function PlatformCsvPanel({
 }: {
   title: string; children: React.ReactNode; defaultExpanded?: boolean;
 }) {
-  const { theme } = useTheme();
+  const { theme, dur, cardSurface } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const bodyOpacity = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
+  const surface = cardSurface(true);
+
+  function toggle() {
+    const to = expanded ? 0 : 1;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    Animated.timing(bodyOpacity, {
+      toValue: to,
+      duration: dur(220),
+      useNativeDriver: true,
+    }).start();
+    setExpanded((v) => !v);
+  }
 
   return (
-    <View style={{ borderWidth: 1, borderColor: theme.border, borderRadius: 12, marginBottom: 10, overflow: 'hidden' }}>
+    <View style={[{ borderWidth: 1, borderColor: theme.border, borderRadius: 12, marginBottom: 10, overflow: 'hidden' }, surface]}>
       <TouchableOpacity
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }}
-        onPress={() => setExpanded((v) => !v)}
+        onPress={toggle}
         activeOpacity={0.75}
       >
         <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{title}</Text>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={theme.subtext} />
       </TouchableOpacity>
       {expanded && (
-        <View style={{ borderTopWidth: 1, borderTopColor: theme.border, padding: 12 }}>
+        <Animated.View style={{ borderTopWidth: 1, borderTopColor: theme.border, padding: 12, opacity: bodyOpacity }}>
           {children}
-        </View>
+        </Animated.View>
       )}
     </View>
+  );
+}
+
+// ─── Add Manual Account Modal ─────────────────────────
+
+function AddManualAccountModal({
+  visible, onClose, onAdd,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (platform: Platform, name: string, currency: string, color: string) => void;
+}) {
+  const { theme, cardSurface } = useTheme();
+  const { t } = useLanguage();
+  const [platform, setPlatform] = useState<Platform>('manual');
+  const [name, setName] = useState('');
+  const [currency, setCurrency] = useState('UAH');
+  const [color, setColor] = useState(CARD_COLORS[0]);
+
+  useEffect(() => {
+    if (visible) {
+      setPlatform('manual');
+      setName('');
+      setCurrency('UAH');
+      setColor(CARD_COLORS[0]);
+    }
+  }, [visible]);
+
+  const PLATFORMS: Platform[] = ['manual', 'monobank', 'privatbank', 'zen', 'ibkr'];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.overlay }}>
+          <View style={{ ...cardSurface(), borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: theme.border, padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginBottom: 12 }}>{t.settingsAddAccount}</Text>
+            <GroupLabel label={t.settingsPlatform} />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {PLATFORMS.map((p) => (
+                <TouchableOpacity key={p} onPress={() => setPlatform(p)} style={{
+                  paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                  borderColor: platform === p ? theme.accent : theme.border,
+                  backgroundColor: platform === p ? theme.accent + '22' : theme.cardAlt,
+                }}>
+                  <Text style={{ color: platform === p ? theme.accent : theme.subtext, fontSize: 12, fontWeight: '600' }}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>{t.dashCardName}</Text>
+            <TextInput
+              style={{ borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15, backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 12 }}
+              value={name} onChangeText={setName} placeholder={t.settingsAddAccountName} placeholderTextColor={theme.subtext}
+            />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 8 }}>{t.txCurrency}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+              {['UAH', 'USD', 'EUR', 'GBP'].map((c) => (
+                <TouchableOpacity key={c} onPress={() => setCurrency(c)} style={{
+                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                  borderColor: currency === c ? theme.accent : theme.border,
+                  backgroundColor: currency === c ? theme.accent + '22' : theme.cardAlt,
+                }}>
+                  <Text style={{ color: currency === c ? theme.accent : theme.subtext, fontWeight: '600' }}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={{ flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 13, alignItems: 'center' }} onPress={onClose}>
+                <Text style={{ color: theme.subtext, fontWeight: '600' }}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 2, borderRadius: 10, padding: 13, alignItems: 'center', backgroundColor: theme.accent, opacity: name.trim() ? 1 : 0.5 }}
+                disabled={!name.trim()}
+                onPress={() => { onAdd(platform, name.trim(), currency, color); onClose(); }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{t.save}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -451,25 +548,29 @@ function SettingsCardEditModal({
   account, visible, onClose, onSave,
 }: {
   account: Account; visible: boolean; onClose: () => void;
-  onSave: (name: string, color: string) => void;
+  onSave: (name: string, color: string, currency: string) => void;
 }) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const [name,  setName]  = useState(account.displayName ?? account.name);
   const [color, setColor] = useState(account.color ?? '#3b82f6');
+  const [currency, setCurrency] = useState(account.currency);
 
   useEffect(() => {
     if (visible) {
       setName(account.displayName ?? account.name);
       setColor(account.color ?? '#3b82f6');
+      setCurrency(account.currency);
     }
   }, [visible, account]);
+
+  const ALL_CUR = ['UAH', 'USD', 'EUR', 'GBP', ...AVAILABLE_CURRENCIES.filter((c) => !['UAH','USD','EUR','GBP'].includes(c))];
 
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.overlay }}>
-          <View style={{ backgroundColor: theme.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: theme.border, padding: 20 }}>
+          <View style={{ ...cardSurface(), borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: theme.border, padding: 20 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text }}>{t.dashEditCard}</Text>
               <TouchableOpacity onPress={onClose} activeOpacity={0.75}>
@@ -497,16 +598,192 @@ function SettingsCardEditModal({
                 />
               ))}
             </View>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 8 }}>{t.txCurrency}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+              {ALL_CUR.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={{
+                    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                    borderColor: currency === c ? theme.accent : theme.border,
+                    backgroundColor: currency === c ? theme.accent + '22' : theme.cardAlt,
+                  }}
+                  onPress={() => setCurrency(c)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ color: currency === c ? theme.accent : theme.subtext, fontWeight: '600' }}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity style={{ flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 13, alignItems: 'center' }} onPress={onClose} activeOpacity={0.75}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: theme.subtext }}>{t.cancel}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 2, borderRadius: 10, padding: 13, alignItems: 'center', backgroundColor: theme.accent }}
-                onPress={() => { onSave(name.trim() || account.name, color); onClose(); }}
+                onPress={() => { onSave(name.trim() || account.name, color, currency); onClose(); }}
                 activeOpacity={0.75}
               >
                 <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{t.save}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Category Rule Modal ──────────────────────────────
+
+const RULE_FIELDS: RuleMatchField[] = ['description', 'mcc', 'amount', 'platform', 'type', 'currency'];
+const RULE_OPS: RuleMatchOp[] = ['contains', 'equals', 'regex', 'range'];
+
+function CategoryRuleModal({
+  visible, rule, onClose, onSaved,
+}: {
+  visible: boolean;
+  rule?: CategoryRule | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { theme, cardSurface } = useTheme();
+  const { t } = useLanguage();
+  const categoryLabels = useCategoryLabels();
+  const [name, setName] = useState('');
+  const [matchField, setMatchField] = useState<RuleMatchField>('description');
+  const [matchOp, setMatchOp] = useState<RuleMatchOp>('contains');
+  const [matchValue, setMatchValue] = useState('');
+  const [categoryKey, setCategoryKey] = useState<CategoryKey>('other');
+  const [priority, setPriority] = useState('10');
+
+  useEffect(() => {
+    if (!visible) return;
+    if (rule) {
+      setName(rule.name);
+      setMatchField(rule.matchField);
+      setMatchOp(rule.matchOp);
+      setMatchValue(rule.matchValue);
+      setCategoryKey(rule.categoryKey);
+      setPriority(String(rule.priority));
+    } else {
+      setName('');
+      setMatchField('description');
+      setMatchOp('contains');
+      setMatchValue('');
+      setCategoryKey('other');
+      setPriority('10');
+    }
+  }, [visible, rule]);
+
+  const fieldLabels: Record<RuleMatchField, string> = {
+    mcc: t.ruleFieldMcc,
+    description: t.ruleFieldDescription,
+    amount: t.ruleFieldAmount,
+    platform: t.ruleFieldPlatform,
+    type: t.ruleFieldType,
+    currency: t.ruleFieldCurrency,
+  };
+  const opLabels: Record<RuleMatchOp, string> = {
+    contains: t.ruleOpContains,
+    equals: t.ruleOpEquals,
+    regex: t.ruleOpRegex,
+    range: t.ruleOpRange,
+  };
+
+  const canSave = matchValue.trim().length > 0;
+
+  function handleSave() {
+    if (!canSave) return;
+    const trimmedValue = matchValue.trim();
+    const ruleName = name.trim()
+      || buildRuleDisplayName(matchField, matchOp, trimmedValue, categoryKey);
+    saveCategoryRule({
+      id: rule?.id,
+      name: ruleName,
+      categoryKey,
+      priority: parseInt(priority, 10) || 10,
+      matchField,
+      matchOp,
+      matchValue: trimmedValue,
+      enabled: true,
+    });
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: theme.overlay }}>
+          <View style={{ ...cardSurface(), borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: theme.border, padding: 20, maxHeight: '90%' }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginBottom: 4 }}>
+              {rule ? t.settingsEditRule : t.settingsAddRule}
+            </Text>
+            <Text style={{ fontSize: 12, color: theme.subtext, marginBottom: 12 }}>{t.settingsRuleOptionalHint}</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>{t.settingsRuleName}</Text>
+              <TextInput
+                style={{ borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15, backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 12 }}
+                value={name} onChangeText={setName} placeholder={t.settingsRuleNameOptional} placeholderTextColor={theme.subtext}
+              />
+              <GroupLabel label={t.settingsRuleField} />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {RULE_FIELDS.map((f) => (
+                  <TouchableOpacity key={f} onPress={() => setMatchField(f)} style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                    borderColor: matchField === f ? theme.accent : theme.border,
+                    backgroundColor: matchField === f ? theme.accent + '22' : theme.cardAlt,
+                  }}>
+                    <Text style={{ color: matchField === f ? theme.accent : theme.subtext, fontSize: 12, fontWeight: '600' }}>{fieldLabels[f]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <GroupLabel label={t.settingsRuleOp} />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {RULE_OPS.map((op) => (
+                  <TouchableOpacity key={op} onPress={() => setMatchOp(op)} style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                    borderColor: matchOp === op ? theme.accent : theme.border,
+                    backgroundColor: matchOp === op ? theme.accent + '22' : theme.cardAlt,
+                  }}>
+                    <Text style={{ color: matchOp === op ? theme.accent : theme.subtext, fontSize: 12, fontWeight: '600' }}>{opLabels[op]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>{t.settingsRuleValue}</Text>
+              <TextInput
+                style={{ borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15, backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 12 }}
+                value={matchValue} onChangeText={setMatchValue} placeholder={matchOp === 'range' ? '100-5000' : 'steam|xbox'} placeholderTextColor={theme.subtext}
+              />
+              <GroupLabel label={t.settingsRuleCategory} />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {ALL_CATEGORY_KEYS.map((k) => (
+                  <TouchableOpacity key={k} onPress={() => setCategoryKey(k)} style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1,
+                    borderColor: categoryKey === k ? theme.accent : theme.border,
+                    backgroundColor: categoryKey === k ? theme.accent + '22' : theme.cardAlt,
+                  }}>
+                    <Text style={{ color: categoryKey === k ? theme.accent : theme.subtext, fontSize: 11, fontWeight: '600' }}>{categoryLabels[k]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>{t.settingsRulePriority}</Text>
+              <TextInput
+                style={{ borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15, backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 16 }}
+                value={priority} onChangeText={setPriority} keyboardType="number-pad" placeholderTextColor={theme.subtext}
+              />
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={{ flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 13, alignItems: 'center' }} onPress={onClose}>
+                <Text style={{ color: theme.subtext, fontWeight: '600' }}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 2, borderRadius: 10, padding: 13, alignItems: 'center', backgroundColor: theme.accent, opacity: canSave ? 1 : 0.5 }}
+                disabled={!canSave}
+                onPress={handleSave}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{t.save}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -555,9 +832,13 @@ function confirmImportTransactions(
 // ─── Main Screen ──────────────────────────────────────
 
 export function SettingsScreen() {
-  const { theme, themeKey, accent, setThemeKey, setAccent } = useTheme();
+  const {
+    theme, themeKey, accent, setThemeKey, setAccent,
+    animationSpeed, transparencyPct,
+    setAnimationSpeed, setTransparencyPct, cardSurface,
+  } = useTheme();
   const { language, setLanguage, t } = useLanguage();
-  const { accounts, loadAccounts, addAccount, updateBalance, updateDisplay, deactivateAccount } = useAccountsStore();
+  const { accounts, loadAccounts, addAccount, updateBalance, updateAccount, deactivateAccount } = useAccountsStore();
   const { upsertTransactions } = useTransactionsStore();
   const { show, element: alertEl } = useAppAlert();
 
@@ -566,10 +847,17 @@ export function SettingsScreen() {
   const [prefCurrencies, setPrefCurrencies] = useState<string[]>(['USD','EUR','GBP']);
   const [homeCurrency,   setHomeCurrencyState] = useState<string>('UAH');
   const [editAccount,    setEditAccount]    = useState<Account | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [showAddRule,    setShowAddRule]    = useState(false);
+  const [editRule,       setEditRule]       = useState<CategoryRule | null>(null);
+  const [categoryRules,  setCategoryRules]  = useState(() => loadCategoryRules());
+  const categoryLabels = useCategoryLabels();
   const [reTagging,      setReTagging]      = useState(false);
 
   useEffect(() => {
     loadAccounts();
+    seedDefaultCategoryRules();
+    setCategoryRules(loadCategoryRules());
     try {
       const db  = getDatabase();
       const row = db.getFirstSync<{ preferred_currencies: string | null; home_currency: string | null }>(
@@ -670,7 +958,8 @@ export function SettingsScreen() {
       const db = getDatabase();
       const rows = db.getAllSync<{
         id: string; mcc: number | null; description: string | null; raw_payload: string | null;
-      }>(`SELECT id, mcc, description, raw_payload FROM transactions`);
+        amount: number; platform: string; type: string; currency: string;
+      }>(`SELECT id, mcc, description, raw_payload, amount, platform, type, currency FROM transactions`);
       const ownIbans = accounts.filter((a) => a.iban).map((a) => a.iban!);
       let updated = 0;
       db.withTransactionSync(() => {
@@ -685,16 +974,22 @@ export function SettingsScreen() {
               bankCategory = raw.bankCat?.trim() || undefined;
             } catch {}
           }
-          const category = autoDetectCategory(
+          const catKey = autoDetectCategoryKey(
             row.mcc ?? undefined,
             row.description ?? undefined,
             tag,
             bankCategory,
             ownIbans,
+            {
+              amount: row.amount,
+              platform: row.platform as Platform,
+              type: row.type,
+              currency: row.currency,
+            },
           );
           db.runSync(
             'UPDATE transactions SET tag = ?, category = ? WHERE id = ?',
-            [tag ?? null, category, row.id],
+            [catKey, catKey, row.id],
           );
           updated++;
         }
@@ -909,11 +1204,37 @@ export function SettingsScreen() {
             })}
           </View>
           <GroupLabel label={t.settingsAccentColor} />
-          <View style={[s.accentRow, { marginBottom: 4 }]}>
+          <View style={[s.accentRow, { marginBottom: 16 }]}>
             {ACCENT_PRESETS.map((c) => (
               <TouchableOpacity key={c} style={[s.accentDot, { backgroundColor: c }, accent === c && s.accentDotActive]} onPress={() => setAccent(c)} />
             ))}
           </View>
+
+          <GroupLabel label={t.settingsTransparency} />
+          <Text style={[s.hintText, { marginBottom: 8 }]}>{t.settingsTransparencyHint}</Text>
+          <View style={[s.glassPreview, cardSurface(true), { borderColor: theme.border, marginBottom: 12 }]}>
+            <Text style={{ color: theme.text, fontWeight: '600' }}>{t.settingsTransparencyPreview}</Text>
+            <Text style={{ color: theme.subtext, fontSize: 12, marginTop: 4 }}>{t.settingsTransparencyPreviewHint}</Text>
+          </View>
+          <SettingSlider
+            value={transparencyPct}
+            min={0}
+            max={100}
+            step={1}
+            onChange={setTransparencyPct}
+            format={(v) => `${Math.round(v)}%`}
+          />
+
+          <GroupLabel label={t.settingsAnimSpeed} />
+          <Text style={[s.hintText, { marginBottom: 4 }]}>{t.settingsAnimSpeedHint}</Text>
+          <SettingSlider
+            value={animationSpeed}
+            min={0.5}
+            max={2}
+            step={0.1}
+            onChange={setAnimationSpeed}
+            format={(v) => `${Math.round(((v - 0.5) / 1.5) * 100)}%`}
+          />
         </Section>
 
         {/* ─── 2. User Preferences ── */}
@@ -1061,7 +1382,41 @@ export function SettingsScreen() {
 
         {/* ─── Cards & Tags ── */}
         <Section title={t.settingsCardsAndTags} icon="card-outline">
-          <Text style={[s.hintText, { marginBottom: 12 }]}>{t.settingsReAutoTagHint}</Text>
+          <TouchableOpacity
+            style={[s.syncBtn, { marginBottom: 12 }]}
+            onPress={() => setShowAddAccount(true)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#fff" />
+            <Text style={s.syncBtnText}>{t.settingsAddAccount}</Text>
+          </TouchableOpacity>
+
+          <GroupLabel label={t.settingsCategoryRules} />
+          <Text style={[s.hintText, { marginBottom: 8 }]}>{t.settingsCategoryRulesHint}</Text>
+          <TouchableOpacity
+            style={[s.syncBtn, { marginBottom: 12, backgroundColor: theme.cardAlt, borderWidth: 1, borderColor: theme.border }]}
+            onPress={() => { setEditRule(null); setShowAddRule(true); }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={theme.accent} />
+            <Text style={[s.syncBtnText, { color: theme.accent }]}>{t.settingsAddRule}</Text>
+          </TouchableOpacity>
+          {categoryRules.map((rule) => (
+            <View key={rule.id} style={[s.accountRow, { marginBottom: 6 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.accountName}>{rule.name}</Text>
+                <Text style={s.accountMeta}>{rule.matchField} · {rule.matchOp} · {categoryLabels[rule.categoryKey] ?? rule.categoryKey}</Text>
+              </View>
+              <TouchableOpacity onPress={() => { setEditRule(rule); setShowAddRule(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 10 }}>
+                <Ionicons name="pencil-outline" size={16} color={theme.accent} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { deleteCategoryRule(rule.id); setCategoryRules(loadCategoryRules()); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="trash-outline" size={16} color={theme.expense} />
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          <Text style={[s.hintText, { marginBottom: 12, marginTop: 8 }]}>{t.settingsReAutoTagHint}</Text>
           <TouchableOpacity
             style={[s.syncBtn, reTagging && { opacity: 0.6 }, { marginBottom: 16 }]}
             onPress={handleReAutoTag}
@@ -1151,9 +1506,26 @@ export function SettingsScreen() {
           account={editAccount}
           visible={!!editAccount}
           onClose={() => setEditAccount(null)}
-          onSave={(name, color) => { updateDisplay(editAccount.id, name, color); setEditAccount(null); }}
+          onSave={(name, color, currency) => {
+            updateAccount(editAccount.id, { displayName: name, color, currency });
+            setEditAccount(null);
+          }}
         />
       )}
+      <AddManualAccountModal
+        visible={showAddAccount}
+        onClose={() => setShowAddAccount(false)}
+        onAdd={(platform, name, currency, color) => {
+          addAccount({ platform, name, currency, color, displayName: name, balance: 0, isActive: true });
+          loadAccounts();
+        }}
+      />
+      <CategoryRuleModal
+        visible={showAddRule}
+        rule={editRule}
+        onClose={() => { setShowAddRule(false); setEditRule(null); }}
+        onSaved={() => setCategoryRules(loadCategoryRules())}
+      />
     </SafeAreaView>
   );
 }
@@ -1162,6 +1534,7 @@ function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.bg },
     hintText:  { color: t.subtext, fontSize: 13, lineHeight: 18 },
+    glassPreview: { borderRadius: 12, borderWidth: 1, padding: 14 },
 
     themeRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     themeBtn:      { width: '48%', height: 80, alignItems: 'center', justifyContent: 'center', padding: 10, backgroundColor: t.cardAlt, borderRadius: 12, borderWidth: 2, borderColor: t.border, gap: 6 },

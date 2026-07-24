@@ -6,22 +6,27 @@ import { useLanguage } from '../i18n/LanguageContext';
 import type { UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
 
+import type { CategoryKey } from '../utils/categoryRegistry';
+import { normalizeCategoryKey } from '../utils/categoryRegistry';
+
 interface Props {
   item: UnifiedTransaction;
-  tagLabels: Record<string, string>;
+  categoryLabels: Record<string, string>;
   accountColor: string;
   accountName: string;
   onPress?: () => void;
 }
 
 export function TransactionListItem({
-  item, tagLabels, accountColor, accountName, onPress,
+  item, categoryLabels, accountColor, accountName, onPress,
 }: Props) {
   const { theme } = useTheme();
   const { t }     = useLanguage();
   const isCancellation = /^Cancellation\./i.test(item.description ?? '');
   const sign     = item.type === 'income' ? '+' : item.type === 'expense' ? '−' : '';
   const amtColor = item.type === 'income' ? theme.income : item.type === 'expense' ? theme.expense : theme.subtext;
+  const catKey = normalizeCategoryKey(item.tag, item.category);
+  const catLabel = categoryLabels[catKey] ?? catKey;
   const sym      = currencySymbol(item.currency);
 
   const content = (
@@ -37,11 +42,11 @@ export function TransactionListItem({
           <Text style={[styles.date, { color: theme.subtext }]}>
             {format(item.transactionDate, 'HH:mm')}
           </Text>
-          {item.tag && (
+          {(item.tag || item.category) && catKey !== 'other' && (
             <>
               <Text style={[styles.dot, { color: theme.subtext }]}> · </Text>
               <Text style={[styles.tag, { color: theme.accent }]}>
-                {tagLabels[item.tag] ?? item.tag}
+                {catLabel}
               </Text>
             </>
           )}

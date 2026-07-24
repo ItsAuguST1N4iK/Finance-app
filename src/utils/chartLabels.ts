@@ -5,9 +5,8 @@ export function formatDayLabel(day: number): string {
 }
 
 export function formatMonthLabel(monthIndex: number, locale: 'uk' | 'en' = 'uk'): string {
-  if (locale === 'uk') return MONTH_SHORT_UK[monthIndex];
-  const en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return en[monthIndex];
+  const label = locale === 'uk' ? MONTH_SHORT_UK[monthIndex] : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][monthIndex];
+  return `${label}\u2009`;
 }
 
 export function formatQuarterLabel(quarter: number): string {
@@ -19,6 +18,15 @@ export function yearLabelForBar(
   prevYear: number | null,
 ): string | undefined {
   return prevYear === null || prevYear !== year ? String(year) : undefined;
+}
+
+export function formatMonthYearLabel(monthIndex: number, year: number, locale: 'uk' | 'en' = 'uk'): string {
+  const MONTH_FULL_UK = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+    'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+  const MONTH_FULL_EN = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const name = locale === 'uk' ? MONTH_FULL_UK[monthIndex] : MONTH_FULL_EN[monthIndex];
+  return `${name} ${year}`;
 }
 
 export function countMonthsInRange(dateFrom: number, dateTo: number): number {

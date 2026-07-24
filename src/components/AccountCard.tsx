@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { Account } from '../types';
 import { currencySymbol } from '../utils/currency';
+import { HIT_BTN, HIT_ICON } from '../utils/hitSlop';
 
 interface Props {
   account: Account;
@@ -27,8 +28,9 @@ export const ACCOUNT_CARD_GAP = CARD_GAP;
 export function AccountCard({
   account, index, selected, scrollX, onSelect, onEdit,
 }: Props) {
-  const { theme } = useTheme();
+  const { theme, cardSurface: glassCard } = useTheme();
   const cardColor = account.color ?? '#1e293b';
+  const surface = glassCard();
 
   const scaleAnim = useRef(new Animated.Value(selected ? 1.05 : 1)).current;
 
@@ -101,10 +103,10 @@ export function AccountCard({
       <TouchableOpacity
         style={[
           styles.card,
+          surface,
           {
-            backgroundColor: theme.card,
             borderColor: selected ? cardColor : theme.border,
-            borderWidth: selected ? 2 : 1,
+            borderWidth: selected ? 2 : surface.borderWidth || 1,
           },
         ]}
         onPress={onSelect}
@@ -112,6 +114,7 @@ export function AccountCard({
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         activeOpacity={1}
+        hitSlop={HIT_BTN}
       >
         <View style={[styles.colorBar, { backgroundColor: cardColor }]} />
         <View style={[styles.tint, { backgroundColor: cardColor + '18' }]} />
@@ -122,7 +125,7 @@ export function AccountCard({
             </Text>
             <TouchableOpacity
               onPress={onEdit}
-              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              hitSlop={HIT_ICON}
               activeOpacity={0.75}
             >
               <Ionicons name="pencil-outline" size={14} color={theme.subtext} />
@@ -146,6 +149,7 @@ const styles = StyleSheet.create({
   wrapper: {
     width: CARD_W,
     marginRight: CARD_GAP,
+    paddingVertical: 6,
   },
   card: {
     borderRadius: 16,

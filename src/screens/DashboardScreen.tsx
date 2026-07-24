@@ -10,6 +10,7 @@ import { useAccountsStore }     from '../store/accountsSlice';
 import { useTransactionsStore } from '../store/transactionsSlice';
 import { usePlannedIncomeStore } from '../store/plannedIncomeSlice';
 import { useExchangeRatesStore } from '../store/exchangeRatesSlice';
+import { useAnalyticsStore } from '../store/analyticsSlice';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { TransactionListItem } from '../components/TransactionListItem';
@@ -17,9 +18,11 @@ import { AccountCard, ACCOUNT_CARD_SNAP } from '../components/AccountCard';
 import { CardPreview } from '../components/CardPreview';
 import { DateSeparator } from '../components/DateSeparator';
 import { TxDetailModal } from '../components/TxDetailModal';
-import { useTagLabels } from '../hooks/useTagLabels';
+import { useCategoryLabels } from '../hooks/useCategoryLabels';
 import type { Account, PlannedIncome, UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
+import { convertToHomeCurrency } from '../utils/currencyConvert';
+import { HIT_BTN } from '../utils/hitSlop';
 import { getDatabase } from '../db/migrations';
 import { format } from 'date-fns';
 import { uk } from 'date-fns/locale';
@@ -44,7 +47,7 @@ interface CardEditModalProps {
 }
 
 function CardEditModal({ account, visible, onClose, onSave }: CardEditModalProps) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const [name,  setName]  = useState(account.displayName ?? account.name);
   const [color, setColor] = useState(account.color ?? '#3b82f6');
@@ -63,7 +66,7 @@ function CardEditModal({ account, visible, onClose, onSave }: CardEditModalProps
         behavior="padding"
       >
       <View style={[ceStyles.overlay, { backgroundColor: theme.overlay }]}>
-        <View style={[ceStyles.sheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={[ceStyles.sheet, cardSurface(), { borderColor: theme.border }]}>
           <View style={ceStyles.header}>
             <Text style={[ceStyles.title, { color: theme.text }]}>{t.dashEditCard}</Text>
             <TouchableOpacity onPress={onClose} activeOpacity={0.75}>
@@ -147,7 +150,7 @@ const ceStyles = StyleSheet.create({
 const DEFAULT_CURRENCIES = ['USD', 'EUR', 'GBP'];
 
 function ExchangeRatesWidget() {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const { rates, updatedAt, isLoading, fetchRates } = useExchangeRatesStore();
   const [currencies,    setCurrencies]    = useState<string[]>(DEFAULT_CURRENCIES);
@@ -220,7 +223,7 @@ function ExchangeRatesWidget() {
   const shownRates = getDisplayRates();
 
   return (
-    <View style={[erStyles.container, { backgroundColor: theme.card }]}>
+    <View style={[erStyles.container, cardSurface()]}>
       {/* Header: "Обмін валюти" + currency picker + refresh */}
       <View style={[erStyles.header, { borderBottomColor: theme.border }]}>
         <View style={erStyles.headerLeft}>
@@ -280,7 +283,7 @@ function ExchangeRatesWidget() {
           activeOpacity={1}
           onPress={() => setPickerVisible(false)}
         >
-          <View style={[erStyles.pickerSheet, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[erStyles.pickerSheet, cardSurface(), { borderColor: theme.border }]}>
             <Text style={[erStyles.pickerTitle, { color: theme.text }]}>{t.dashBaseCurrency}</Text>
             {ALL_CURRENCIES.map((code) => (
               <TouchableOpacity
@@ -336,7 +339,7 @@ const erStyles = StyleSheet.create({
 // ─── Planner Alert ────────────────────────────────────
 
 function PlannerAlert({ item }: { item: PlannedIncome }) {
-  const { theme } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const daysLeft  = Math.ceil((item.expectedDate - Date.now()) / (1000 * 60 * 60 * 24));
   const isOverdue = item.status === 'overdue';
@@ -348,8 +351,7 @@ function PlannerAlert({ item }: { item: PlannedIncome }) {
     : t.inDays.replace('{n}', String(daysLeft));
 
   return (
-    <View style={[styles.plannerAlert, {
-      backgroundColor: theme.card,
+    <View style={[styles.plannerAlert, cardSurface(), {
       borderColor: isOverdue ? theme.expense : theme.warning,
     }]}>
       <Ionicons
@@ -370,12 +372,14 @@ function PlannerAlert({ item }: { item: PlannedIncome }) {
 // ─── Main Screen ──────────────────────────────────────
 
 export function DashboardScreen() {
-  const { theme } = useTheme();
+  const { theme, dur, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const { accounts, loadAccounts, updateDisplay }  = useAccountsStore();
   const { recentTransactions, loadRecentTransactions } = useTransactionsStore();
   const { items: plannedItems, loadItems }           = usePlannedIncomeStore();
-  const tagLabels = useTagLabels();
+  const { homeCurrency, loadHomeCurrency } = useAnalyticsStore();
+  const { rates, fetchRates } = useExchangeRatesStore();
+  const categoryLabels = useCategoryLabels();
   const [refreshing,   setRefreshing]   = React.useState(false);
   const [editAccount,  setEditAccount]  = useState<Account | null>(null);
   const [detailTx,     setDetailTx]     = useState<UnifiedTransaction | null>(null);
@@ -387,9 +391,11 @@ export function DashboardScreen() {
     loadAccounts();
     loadRecentTransactions();
     loadItems();
+    loadHomeCurrency();
+    fetchRates();
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 300,
+      duration: dur(300),
       useNativeDriver: true,
     }).start();
   }, []);
@@ -410,9 +416,11 @@ export function DashboardScreen() {
 
   const visibleAccounts = accounts.filter((a) => a.id !== 'acc_default');
 
-  const totalBalance = visibleAccounts
-    .filter((a) => a.currency === 'UAH' && a.balance != null)
-    .reduce((sum, a) => sum + (a.balance ?? 0), 0);
+  const totalBalance = visibleAccounts.reduce((sum, a) => {
+    if (a.balance == null) return sum;
+    return sum + convertToHomeCurrency(a.balance, a.currency, homeCurrency, rates);
+  }, 0);
+  const balanceSym = currencySymbol(homeCurrency);
 
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
@@ -430,7 +438,7 @@ export function DashboardScreen() {
         <View style={styles.balanceSection}>
           <Text style={[styles.balanceLabel, { color: theme.subtext }]}>{t.dashTotalBalance}</Text>
           <Text style={[styles.balanceAmount, { color: theme.text }]}>
-            {totalBalance.toLocaleString('uk-UA', { minimumFractionDigits: 2 })} ₴
+            {totalBalance.toLocaleString('uk-UA', { minimumFractionDigits: 2 })} {balanceSym}
           </Text>
           {visibleAccounts.length === 0 && (
             <Text style={[styles.noAccountsHint, { color: theme.subtext }]}>{t.dashAddAccounts}</Text>
@@ -502,7 +510,7 @@ export function DashboardScreen() {
                   {dateLabel !== prevDate && <DateSeparator label={dateLabel} />}
                   <TransactionListItem
                     item={tx}
-                    tagLabels={tagLabels}
+                    categoryLabels={categoryLabels}
                     accountColor={acc?.color ?? theme.accent}
                     accountName={acc ? (acc.displayName ?? acc.name) : tx.platform}
                     onPress={() => setDetailTx(tx)}
@@ -550,7 +558,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
   },
   accountsScroll:  { marginHorizontal: -16 },
-  accountsListContent: { paddingHorizontal: 16, paddingVertical: 4 },
+  accountsListContent: { paddingHorizontal: 16, paddingVertical: 16 },
   plannerAlert: {
     flexDirection: 'row', alignItems: 'center',
     borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1,

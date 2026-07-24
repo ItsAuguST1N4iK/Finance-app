@@ -27,7 +27,7 @@ const TAB_COUNT     = 5;
 const TAB_W         = ISLAND_WIDTH / TAB_COUNT;
 
 export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { theme } = useTheme();
+  const { theme, animationSpeed, cardSurface } = useTheme();
   const { t }     = useLanguage();
   const insets    = useSafeAreaInsets();
 
@@ -46,19 +46,15 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
     Animated.spring(indicatorX, {
       toValue:       state.index * TAB_W,
       useNativeDriver: true,
-      stiffness:     200,
+      stiffness:     200 * animationSpeed,
       damping:       28,
       mass:          1,
     }).start();
-  }, [state.index]);
+  }, [state.index, animationSpeed]);
 
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom + 8 }]} pointerEvents="box-none">
-      <View style={[styles.island, {
-        backgroundColor: theme.tabBar,
-        borderColor:     theme.tabBarBorder,
-        shadowColor:     '#000',
-      }]}>
+      <View style={[styles.island, cardSurface(true), { shadowColor: '#000' }]}>
         {/* Animated slider pill */}
         <Animated.View
           style={[
@@ -92,6 +88,7 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
               style={styles.tab}
               onPress={onPress}
               activeOpacity={0.7}
+              hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
             >
               <Animated.View style={styles.tabInner}>
                 <Ionicons
@@ -131,7 +128,6 @@ const styles = StyleSheet.create({
     width:         ISLAND_WIDTH,
     height:        62,
     borderRadius:  28,
-    borderWidth:   1,
     flexDirection: 'row',
     overflow:      'hidden',
     shadowOpacity: 0.35,

@@ -15,8 +15,8 @@ import Papa from 'papaparse';
 import type { Account, UnifiedTransaction } from '../types';
 import { makeStableTransactionIds } from '../utils/dedup';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
-import { autoDetectTag } from '../utils/tags';
-import { autoDetectCategory, categoryFromZenType } from '../utils/categories';
+import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
+import { categoryFromZenType } from '../utils/categories';
 
 const MONTH_MAP: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -105,15 +105,22 @@ export function parseZenCsv(
     const self = isSelfTransfer(desc, undefined, undefined, ctx)
       || ownIbans.some((own) => desc?.includes(own));
 
-    const tag = self
-      ? ('self_transfer' as const)
-      : autoDetectTag(undefined, desc, ownIbans, undefined, ownAccounts);
-    const category = autoDetectCategory(
-      undefined, desc, tag, categoryFromZenType(txType), ownIbans,
-    );
-
     const amount = Math.abs(settlementAmt);
     const txCurrency = settlementCurrency?.trim() || currency;
+
+    const catKey = resolveImportCategory({
+      description: desc,
+      bankCategory: categoryFromZenType(txType),
+      ownIbans,
+      ownAccounts,
+      amount,
+      platform: 'zen',
+      type: self ? 'transfer' : type,
+      currency: txCurrency,
+      selfTransfer: self,
+    });
+    const { tag, category } = categoryFields(catKey);
+
     const { id, externalId } = makeStableTransactionIds(
       internalAccountId, 'zen', date, amount, txCurrency, desc,
     );

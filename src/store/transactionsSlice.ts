@@ -69,10 +69,10 @@ function buildSelectQuery(filter: TransactionsFilter): { sql: string; params: SQ
     params.push(filter.currency);
   }
   if (filter.tag === '__none__') {
-    conditions.push('tag IS NULL');
+    conditions.push('(tag IS NULL AND (category IS NULL OR category = ""))');
   } else if (filter.tag) {
-    conditions.push('tag = ?');
-    params.push(filter.tag);
+    conditions.push('(tag = ? OR category = ?)');
+    params.push(filter.tag, filter.tag);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
