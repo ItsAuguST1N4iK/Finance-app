@@ -54,7 +54,7 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom + 8 }]} pointerEvents="box-none">
-      <View style={[styles.island, cardSurface(true), { shadowColor: '#000' }]}>
+      <View style={[styles.island, cardSurface(true), { shadowColor: theme.shadow }]}>
         {/* Animated slider pill */}
         <Animated.View
           style={[
@@ -97,13 +97,10 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
                   color={color}
                 />
                 <Text
-                  style={[
-                    styles.tabLabel,
-                    { color, fontSize: route.name === 'Settings' ? 7.5 : 9 },
-                  ]}
+                  style={[styles.tabLabel, { color }]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
-                  minimumFontScale={0.7}
+                  minimumFontScale={0.65}
                 >
                   {label}
                 </Text>

@@ -9,10 +9,12 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 /**
  * @param transparencyPct 0 = solid, 100 = most transparent
+ * @param glassBorder optional theme-aware border color
  */
 export function glassStyle(
   baseColor: string,
   transparencyPct: number,
+  glassBorder: string = 'rgba(255,255,255,0.12)',
 ): { backgroundColor: string; borderColor: string; borderWidth: number } {
   const t = Math.max(0, Math.min(100, transparencyPct));
   const alpha = 1 - t / 100 * 0.72;
@@ -21,7 +23,7 @@ export function glassStyle(
   }
   return {
     backgroundColor: hexToRgba(baseColor, alpha),
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: glassBorder,
     borderWidth: 1,
   };
 }

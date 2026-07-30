@@ -30,6 +30,7 @@ export function buildOwnAccountContext(accounts: Account[]): OwnAccountContext {
 }
 
 const SELF_TRANSFER_PATTERNS = [
+  /^на картку$/i,
   /на свою карт/i,
   /між власн/i,
   /переказ на карт/i,
@@ -37,7 +38,32 @@ const SELF_TRANSFER_PATTERNS = [
   /self.?transfer/i,
   /between own/i,
   /p2p.*own/i,
+  /^transfer to card$/i,
+  /^from (black|white|platinum|iron|yellow|eur|usd|diia)\b/i,
+  /^from .+ card$/i,
+  /між своїми карт/i,
 ];
+
+/** Escape a literal for use inside RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * True when `name` appears as its own token in `text`.
+ * Prevents "ZEN" matching inside "ZENMARKET".
+ */
+export function accountNameAppearsInText(name: string, text: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (n.length < 3) return false;
+  const escaped = escapeRegExp(n);
+  // Boundary: start/end or non-letter/digit (Latin + Ukrainian)
+  const re = new RegExp(
+    `(^|[^a-z0-9а-яіїєґё])${escaped}([^a-z0-9а-яіїєґё]|$)`,
+    'i',
+  );
+  return re.test(text);
+}
 
 /** Returns true when transaction is a transfer between the user's own accounts/cards. */
 export function isSelfTransfer(
@@ -58,7 +84,7 @@ export function isSelfTransfer(
   }
 
   for (const name of ctx.names) {
-    if (text.includes(name.toLowerCase())) return true;
+    if (accountNameAppearsInText(name, text)) return true;
   }
 
   for (const last4 of ctx.last4Digits) {

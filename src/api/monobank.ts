@@ -15,19 +15,9 @@
 
 import type { Account, UnifiedTransaction } from '../types';
 import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
+import { isoCurrencyAlpha as isoAlpha } from '../constants/currencies';
 
 const BASE = 'https://api.monobank.ua';
-
-// ISO 4217 numeric → string
-const CURRENCY_MAP: Record<number, string> = {
-  980: 'UAH', 840: 'USD', 978: 'EUR', 826: 'GBP', 756: 'CHF',
-  985: 'PLN', 203: 'CZK', 348: 'HUF', 946: 'RON', 36:  'AUD',
-  392: 'JPY', 156: 'CNY', 643: 'RUB',
-};
-
-function isoAlpha(code: number): string {
-  return CURRENCY_MAP[code] ?? String(code);
-}
 
 // ─── API response types ───────────────────────────
 

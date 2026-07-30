@@ -1,19 +1,17 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { Account } from '../types';
 import { currencySymbol } from '../utils/currency';
-import { HIT_BTN, HIT_ICON } from '../utils/hitSlop';
+import { numberLocale } from '../utils/locale';
+import { useLanguage } from '../i18n/LanguageContext';
+import { HIT_ICON } from '../utils/hitSlop';
 
 interface Props {
   account: Account;
-  index: number;
-  selected: boolean;
-  scrollX: Animated.Value;
-  onSelect: () => void;
   onEdit: () => void;
 }
 
@@ -25,96 +23,22 @@ export const ACCOUNT_CARD_SNAP = SNAP;
 export const ACCOUNT_CARD_WIDTH = CARD_W;
 export const ACCOUNT_CARD_GAP = CARD_GAP;
 
-export function AccountCard({
-  account, index, selected, scrollX, onSelect, onEdit,
-}: Props) {
+/** Flat card — no press scale, no selection highlight. */
+export function AccountCard({ account, onEdit }: Props) {
   const { theme, cardSurface: glassCard } = useTheme();
+  const { language } = useLanguage();
+  const loc = numberLocale(language);
   const cardColor = account.color ?? '#1e293b';
   const surface = glassCard();
 
-  const scaleAnim = useRef(new Animated.Value(selected ? 1.05 : 1)).current;
-
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: selected ? 1.05 : 1,
-      useNativeDriver: true,
-      stiffness: 200,
-      damping: 16,
-      mass: 1,
-    }).start();
-  }, [selected, scaleAnim]);
-
-  const inputRange = [
-    (index - 1) * SNAP,
-    index * SNAP,
-    (index + 1) * SNAP,
-  ];
-
-  const rotateY = scrollX.interpolate({
-    inputRange,
-    outputRange: ['18deg', '0deg', '-18deg'],
-    extrapolate: 'clamp',
-  });
-
-  const arcScale = scrollX.interpolate({
-    inputRange,
-    outputRange: [0.9, 1.05, 0.9],
-    extrapolate: 'clamp',
-  });
-
-  const translateY = scrollX.interpolate({
-    inputRange,
-    outputRange: [10, -4, 10],
-    extrapolate: 'clamp',
-  });
-
-  function onPressIn() {
-    Animated.spring(scaleAnim, {
-      toValue: 0.96,
-      useNativeDriver: true,
-      stiffness: 300,
-      damping: 12,
-    }).start();
-  }
-
-  function onPressOut() {
-    Animated.spring(scaleAnim, {
-      toValue: selected ? 1.05 : 1,
-      useNativeDriver: true,
-      stiffness: 200,
-      damping: 14,
-    }).start();
-  }
-
   return (
-    <Animated.View
-      style={[
-        styles.wrapper,
-        {
-          transform: [
-            { perspective: 900 },
-            { translateY },
-            { rotateY },
-            { scale: Animated.multiply(scaleAnim, arcScale) },
-          ],
-        },
-      ]}
-    >
-      <TouchableOpacity
+    <View style={styles.wrapper}>
+      <View
         style={[
           styles.card,
           surface,
-          {
-            borderColor: selected ? cardColor : theme.border,
-            borderWidth: selected ? 2 : surface.borderWidth || 1,
-          },
+          { borderColor: theme.border, borderWidth: surface.borderWidth || 1 },
         ]}
-        onPress={onSelect}
-        onLongPress={onEdit}
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        activeOpacity={1}
-        hitSlop={HIT_BTN}
       >
         <View style={[styles.colorBar, { backgroundColor: cardColor }]} />
         <View style={[styles.tint, { backgroundColor: cardColor + '18' }]} />
@@ -123,25 +47,21 @@ export function AccountCard({
             <Text style={[styles.platform, { color: cardColor }]}>
               {account.platform.toUpperCase()}
             </Text>
-            <TouchableOpacity
-              onPress={onEdit}
-              hitSlop={HIT_ICON}
-              activeOpacity={0.75}
-            >
+            <TouchableOpacity onPress={onEdit} hitSlop={HIT_ICON} activeOpacity={0.75}>
               <Ionicons name="pencil-outline" size={14} color={theme.subtext} />
             </TouchableOpacity>
           </View>
           <Text style={[styles.balance, { color: theme.text }]}>
             {account.balance != null
-              ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)}`
+              ? `${account.balance.toLocaleString(loc)} ${currencySymbol(account.currency)}`
               : '—'}
           </Text>
           <Text style={[styles.name, { color: theme.subtext }]} numberOfLines={1}>
             {account.displayName ?? account.name}
           </Text>
         </View>
-      </TouchableOpacity>
-    </Animated.View>
+      </View>
+    </View>
   );
 }
 
@@ -149,11 +69,10 @@ const styles = StyleSheet.create({
   wrapper: {
     width: CARD_W,
     marginRight: CARD_GAP,
-    paddingVertical: 6,
   },
   card: {
     borderRadius: 16,
-    minHeight: 100,
+    minHeight: 88,
     overflow: 'hidden',
     flexDirection: 'row',
   },

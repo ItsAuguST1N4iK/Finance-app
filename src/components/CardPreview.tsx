@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import type { Account } from '../types';
 import { currencySymbol } from '../utils/currency';
+import { numberLocale } from '../utils/locale';
 
 interface Props {
   account: Account;
@@ -12,6 +14,8 @@ interface Props {
 
 export function CardPreview({ account, name, color }: Props) {
   const { theme } = useTheme();
+  const { language } = useLanguage();
+  const loc = numberLocale(language);
 
   return (
     <View style={[styles.card, { backgroundColor: theme.card, borderColor: color, borderWidth: 2 }]}>
@@ -21,7 +25,7 @@ export function CardPreview({ account, name, color }: Props) {
         <Text style={[styles.platform, { color }]}>{account.platform.toUpperCase()}</Text>
         <Text style={[styles.balance, { color: theme.text }]}>
           {account.balance != null
-            ? `${account.balance.toLocaleString('uk-UA')} ${currencySymbol(account.currency)} ${account.currency}`
+            ? `${account.balance.toLocaleString(loc)} ${currencySymbol(account.currency)} ${account.currency}`
             : '—'}
         </Text>
         <Text style={[styles.name, { color: theme.subtext }]} numberOfLines={1}>

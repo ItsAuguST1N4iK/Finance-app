@@ -9,6 +9,10 @@ import { AppNavigator }  from './src/navigation/AppNavigator';
 import { usePlannedIncomeStore } from './src/store/plannedIncomeSlice';
 import { ThemeProvider }    from './src/theme/ThemeContext';
 import { LanguageProvider } from './src/i18n/LanguageContext';
+import { repairCurrencyMismatches } from './src/utils/repairCurrency';
+import { ensureEssentialCategoryRules } from './src/utils/categoryRules';
+import { refreshCustomCategoryCache } from './src/utils/categoryImpact';
+import { refreshAccountBalancesFromTransactions } from './src/utils/accountBalance';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -19,6 +23,14 @@ export default function App() {
     async function init() {
       try {
         await runMigrations();
+        ensureEssentialCategoryRules();
+        refreshCustomCategoryCache();
+        const repaired = repairCurrencyMismatches();
+        if (repaired.monoCsvFixed || repaired.selfTransferTyped) {
+          console.log('[App] data repair:', repaired);
+        }
+        // One forced recompute during splash — avoids double refresh after first loadAccounts
+        refreshAccountBalancesFromTransactions(true);
         checkOverdue();
         setReady(true);
       } catch (e) {
@@ -32,7 +44,7 @@ export default function App() {
   if (error) {
     return (
       <View style={styles.errorScreen}>
-        <Text style={styles.errorTitle}>Помилка ініціалізації</Text>
+        <Text style={styles.errorTitle}>Init error / Помилка ініціалізації</Text>
         <Text style={styles.errorText}>{error}</Text>
       </View>
     );

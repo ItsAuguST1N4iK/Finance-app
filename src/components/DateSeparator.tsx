@@ -14,7 +14,7 @@ export function DateSeparator({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  row:   { flexDirection: 'row', alignItems: 'center', marginVertical: 8, paddingHorizontal: 16 },
-  line:  { flex: 1, height: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', marginVertical: 8 },
+  line: { flex: 1, height: 1 },
   label: { fontSize: 11, fontWeight: '600', paddingHorizontal: 10, textAlign: 'center' },
 });

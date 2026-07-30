@@ -3,6 +3,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { IslandTabBar } from './IslandTabBar';
+import { AppScreenHeader } from './AppScreenHeader';
+import { AppProgressBar } from './AppProgressBar';
+import { View, StyleSheet } from 'react-native';
 
 import { DashboardScreen }    from '../screens/DashboardScreen';
 import { TransactionsScreen } from '../screens/TransactionsScreen';
@@ -25,24 +28,27 @@ export function AppNavigator() {
   const { t }     = useLanguage();
 
   return (
-    <Tab.Navigator
-      tabBar={(props) => <IslandTabBar {...props} />}
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: theme.header,
-          borderBottomColor: theme.border,
-          borderBottomWidth: 1,
-        },
-        headerTintColor: theme.text,
-        headerTitleStyle: { fontWeight: '600' },
-        sceneStyle: { backgroundColor: theme.bg },
-      }}
-    >
-      <Tab.Screen name="Dashboard"    component={DashboardScreen}    options={{ title: t.tabDashboard    }} />
-      <Tab.Screen name="Transactions" component={TransactionsScreen} options={{ title: t.tabTransactions }} />
-      <Tab.Screen name="Planner"      component={PlannerScreen}      options={{ title: t.tabPlanner      }} />
-      <Tab.Screen name="Analytics"    component={AnalyticsScreen}    options={{ title: t.tabAnalytics    }} />
-      <Tab.Screen name="Settings"     component={SettingsScreen}     options={{ title: t.tabSettings     }} />
-    </Tab.Navigator>
+    <View style={[styles.root, { backgroundColor: theme.bg }]}>
+      <Tab.Navigator
+        tabBar={(props) => <IslandTabBar {...props} />}
+        screenOptions={{
+          header: ({ options }) => (
+            <AppScreenHeader title={typeof options.title === 'string' ? options.title : undefined} />
+          ),
+          sceneStyle: { backgroundColor: theme.bg },
+        }}
+      >
+        <Tab.Screen name="Dashboard"    component={DashboardScreen}    options={{ title: t.tabDashboard    }} />
+        <Tab.Screen name="Transactions" component={TransactionsScreen} options={{ title: t.tabTransactions }} />
+        <Tab.Screen name="Planner"      component={PlannerScreen}      options={{ title: t.tabPlanner      }} />
+        <Tab.Screen name="Analytics"    component={AnalyticsScreen}    options={{ title: t.tabAnalytics    }} />
+        <Tab.Screen name="Settings"     component={SettingsScreen}     options={{ title: t.tabSettings     }} />
+      </Tab.Navigator>
+      <AppProgressBar />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

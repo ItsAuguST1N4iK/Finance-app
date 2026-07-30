@@ -126,6 +126,49 @@ export const SCHEMA_V8 = `
   ALTER TABLE settings ADD COLUMN liquid_glass    INTEGER DEFAULT 1;
 `;
 
+/**
+ * SCHEMA_V7 rebuilt transactions without UNIQUE(platform, external_id).
+ * V11 restores uniqueness, adds category_locked for manual tag protection,
+ * and is applied via a function migration (dupe cleanup + table rebuild).
+ */
+export const SCHEMA_V11_CREATE = `
+  CREATE TABLE transactions_v11 (
+    id               TEXT PRIMARY KEY,
+    account_id       TEXT NOT NULL REFERENCES accounts(id),
+    platform         TEXT NOT NULL CHECK (platform IN ('monobank','ibkr','privatbank','zen','manual')),
+    external_id      TEXT,
+    type             TEXT NOT NULL CHECK (type IN ('income','expense','transfer','fee')),
+    amount           REAL NOT NULL,
+    currency         TEXT NOT NULL,
+    amount_base      REAL,
+    exchange_rate    REAL,
+    fee_amount       REAL NOT NULL DEFAULT 0,
+    fee_currency     TEXT,
+    fee_type         TEXT,
+    description      TEXT,
+    category         TEXT,
+    tag              TEXT,
+    category_locked  INTEGER NOT NULL DEFAULT 0,
+    mcc              INTEGER,
+    counterparty     TEXT,
+    direction_from   TEXT,
+    direction_to     TEXT,
+    transaction_date INTEGER NOT NULL,
+    imported_at      INTEGER NOT NULL,
+    raw_payload      TEXT,
+    UNIQUE (platform, external_id)
+  );
+`;
+
+export const SCHEMA_V11_INDEXES = `
+  CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions(account_id, transaction_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_tx_platform     ON transactions(platform);
+  CREATE INDEX IF NOT EXISTS idx_tx_type         ON transactions(type);
+  CREATE INDEX IF NOT EXISTS idx_tx_date         ON transactions(transaction_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_tx_tag          ON transactions(tag);
+  CREATE INDEX IF NOT EXISTS idx_tx_external     ON transactions(platform, external_id);
+`;
+
 export const SCHEMA_V1 = `
   -- Версіювання схеми (для майбутніх міграцій)
   CREATE TABLE IF NOT EXISTS _schema_version (
@@ -221,11 +264,31 @@ export const SCHEMA_V1 = `
 
   CREATE INDEX IF NOT EXISTS idx_pi_date   ON planned_income(expected_date);
   CREATE INDEX IF NOT EXISTS idx_pi_status ON planned_income(status);
+`;
 
-  -- Кеш агрегацій для аналітики (TTL = 30 хв)
-  CREATE TABLE IF NOT EXISTS analytics_cache (
-    cache_key   TEXT PRIMARY KEY,
-    payload     TEXT NOT NULL,
-    computed_at INTEGER NOT NULL
+/** Custom user-defined tags/categories with P&L impact. */
+export const SCHEMA_V14 = `
+  CREATE TABLE IF NOT EXISTS custom_categories (
+    id         TEXT PRIMARY KEY,
+    key        TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL,
+    impact     TEXT NOT NULL CHECK (impact IN ('expense','income','neutral','fee')),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_custom_cat_key ON custom_categories(key);
+`;
+
+/** Tombstones for user-deleted built-in scraper rules (so ensure won't recreate them). */
+export const SCHEMA_V15 = `
+  CREATE TABLE IF NOT EXISTS deleted_scraper_rules (
+    id TEXT PRIMARY KEY
+  );
+`;
+
+/** Hidden builtins + allow impact=fee on custom_categories. */
+export const SCHEMA_V16 = `
+  CREATE TABLE IF NOT EXISTS hidden_categories (
+    key TEXT PRIMARY KEY
   );
 `;

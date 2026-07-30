@@ -1,13 +1,14 @@
 import { create } from 'zustand';
 import type { Account } from '../types';
 import { getDatabase } from '../db/migrations';
+import { areBalancesDirty, refreshAccountBalancesFromTransactions } from '../utils/accountBalance';
 
 interface AccountsState {
   accounts: Account[];
   isLoading: boolean;
 
-  loadAccounts: () => void;
-  addAccount: (account: Omit<Account, 'id' | 'createdAt'>) => void;
+  loadAccounts: (force?: boolean) => void;
+  addAccount: (account: Omit<Account, 'id' | 'createdAt'>) => Account;
   updateBalance: (accountId: string, balance: number) => void;
   updateDisplay: (accountId: string, displayName: string, color?: string) => void;
   updateAccount: (accountId: string, patch: { displayName?: string; color?: string; currency?: string; name?: string }) => void;
@@ -18,9 +19,18 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   accounts: [],
   isLoading: false,
 
-  loadAccounts: () => {
+  loadAccounts: (force = false) => {
+    // Skip redundant tab-mount reloads when store is warm and balances are clean
+    if (!force && get().accounts.length > 0 && !areBalancesDirty()) return;
     set({ isLoading: true });
     try {
+      // Recompute balances only when dirty (after import/sync) — avoids UI freezes
+      try {
+        refreshAccountBalancesFromTransactions();
+      } catch (e) {
+        console.warn('[accountsSlice] balance recompute skipped:', e);
+      }
+
       const db = getDatabase();
       const rows = db.getAllSync<Account & {
         is_active: number;
@@ -68,58 +78,64 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
        data.displayName ?? data.name, data.color ?? null]
     );
 
-    const newAccount: Account = { ...data, id, isActive: true, createdAt: now };
-    set((state) => ({ accounts: [...state.accounts, newAccount] }));
+    const newAccount: Account = {
+      ...data,
+      id,
+      createdAt: now,
+      isActive: true,
+      displayName: data.displayName ?? data.name,
+    };
+    set({ accounts: [...get().accounts, newAccount] });
+    return newAccount;
   },
 
   updateBalance: (accountId, balance) => {
     const db = getDatabase();
-    db.runSync(`UPDATE accounts SET balance = ? WHERE id = ?`, [balance, accountId]);
-    set((state) => ({
-      accounts: state.accounts.map((a) =>
+    db.runSync('UPDATE accounts SET balance = ? WHERE id = ?', [balance, accountId]);
+    set({
+      accounts: get().accounts.map((a) =>
         a.id === accountId ? { ...a, balance } : a
       ),
-    }));
+    });
   },
 
   updateDisplay: (accountId, displayName, color) => {
-    get().updateAccount(accountId, { displayName, color });
+    const db = getDatabase();
+    if (color !== undefined) {
+      db.runSync('UPDATE accounts SET display_name = ?, color = ? WHERE id = ?', [displayName, color, accountId]);
+    } else {
+      db.runSync('UPDATE accounts SET display_name = ? WHERE id = ?', [displayName, accountId]);
+    }
+    set({
+      accounts: get().accounts.map((a) =>
+        a.id === accountId
+          ? { ...a, displayName, ...(color !== undefined ? { color } : {}) }
+          : a
+      ),
+    });
   },
 
   updateAccount: (accountId, patch) => {
     const db = getDatabase();
     const sets: string[] = [];
-    const vals: (string | number)[] = [];
-
+    const vals: (string | null)[] = [];
     if (patch.displayName !== undefined) { sets.push('display_name = ?'); vals.push(patch.displayName); }
-    if (patch.color !== undefined)       { sets.push('color = ?'); vals.push(patch.color); }
-    if (patch.currency !== undefined)    { sets.push('currency = ?'); vals.push(patch.currency); }
-    if (patch.name !== undefined)        { sets.push('name = ?'); vals.push(patch.name); }
-
+    if (patch.color !== undefined) { sets.push('color = ?'); vals.push(patch.color); }
+    if (patch.currency !== undefined) { sets.push('currency = ?'); vals.push(patch.currency); }
+    if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
     if (sets.length === 0) return;
     vals.push(accountId);
     db.runSync(`UPDATE accounts SET ${sets.join(', ')} WHERE id = ?`, vals);
-
-    set((state) => ({
-      accounts: state.accounts.map((a) =>
-        a.id === accountId
-          ? {
-              ...a,
-              ...(patch.displayName !== undefined ? { displayName: patch.displayName } : {}),
-              ...(patch.color !== undefined ? { color: patch.color } : {}),
-              ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
-              ...(patch.name !== undefined ? { name: patch.name } : {}),
-            }
-          : a,
+    set({
+      accounts: get().accounts.map((a) =>
+        a.id === accountId ? { ...a, ...patch } : a
       ),
-    }));
+    });
   },
 
   deactivateAccount: (accountId) => {
     const db = getDatabase();
-    db.runSync(`UPDATE accounts SET is_active = 0 WHERE id = ?`, [accountId]);
-    set((state) => ({
-      accounts: state.accounts.filter((a) => a.id !== accountId),
-    }));
+    db.runSync('UPDATE accounts SET is_active = 0 WHERE id = ?', [accountId]);
+    set({ accounts: get().accounts.filter((a) => a.id !== accountId) });
   },
 }));

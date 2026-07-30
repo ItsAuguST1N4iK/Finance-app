@@ -1,8 +1,20 @@
 import type { Account, Platform } from '../types';
 import type { CategoryKey } from './categoryRegistry';
 import { autoDetectCategoryKey } from './categories';
+import type { CategoryRule } from './categoryRules';
 
-/** Unified category assignment for import pipelines and re-tagging. */
+/** Cached rules for the current import batch — avoids SQLite on every row. */
+let importRulesCache: CategoryRule[] | null = null;
+
+export function setImportCategoryRulesCache(rules: CategoryRule[] | null): void {
+  importRulesCache = rules;
+}
+
+export function getImportCategoryRulesCache(): CategoryRule[] | null {
+  return importRulesCache;
+}
+
+/** Unified category assignment for import pipelines. Rules/scrapers run here only. */
 export function resolveImportCategory(params: {
   mcc?: number;
   description?: string;
@@ -15,8 +27,12 @@ export function resolveImportCategory(params: {
   type?: string;
   currency?: string;
   selfTransfer?: boolean;
-}): CategoryKey {
+  /** Prefer batch cache; fall back to empty (caller should prepare cache). */
+  rules?: CategoryRule[];
+}): string {
   if (params.selfTransfer) return 'self_transfer';
+
+  const rules = params.rules ?? importRulesCache ?? undefined;
 
   return autoDetectCategoryKey(
     params.mcc,
@@ -29,10 +45,13 @@ export function resolveImportCategory(params: {
       platform: params.platform,
       type: params.type,
       currency: params.currency,
+      ownAccounts: params.ownAccounts,
+      counterIban: params.counterIban,
+      rules,
     },
   );
 }
 
-export function categoryFields(key: CategoryKey): { tag: CategoryKey; category: CategoryKey } {
+export function categoryFields(key: string): { tag: string; category: string } {
   return { tag: key, category: key };
 }

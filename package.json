@@ -1,6 +1,6 @@
 {
   "name": "finance-control",
-  "version": "1.0.0",
+  "version": "10.2.2",
   "main": "index.js",
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1",
@@ -24,6 +24,7 @@
     "expo-local-authentication": "~17.0.8",
     "expo-notifications": "~0.32.17",
     "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "~14.0.9",

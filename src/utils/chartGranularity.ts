@@ -1,4 +1,4 @@
-import type { ChartBar } from '../store/analyticsSlice';
+import type { ChartBar } from '../types';
 
 export type ChartGranularity =
   | 'daily'

@@ -1,11 +1,8 @@
 import { create } from 'zustand';
+import type { CurrencyRate } from '../types';
+import { ISO_4217_NUMERIC } from '../constants/currencies';
 
-export interface CurrencyRate {
-  code: string;      // 'USD', 'EUR', 'GBP', etc.
-  rateBuy: number;
-  rateSell: number;
-  rateCross?: number;
-}
+export type { CurrencyRate };
 
 interface ExchangeRatesState {
   rates: CurrencyRate[];
@@ -14,14 +11,6 @@ interface ExchangeRatesState {
   error: string | null;
   fetchRates: () => Promise<void>;
 }
-
-// ISO 4217 numeric → alpha mapping (subset)
-const NUM_TO_ALPHA: Record<number, string> = {
-  840: 'USD', 978: 'EUR', 826: 'GBP',
-  756: 'CHF', 203: 'CZK', 985: 'PLN',
-  124: 'CAD', 36:  'AUD', 392: 'JPY',
-  980: 'UAH',
-};
 
 export const useExchangeRatesStore = create<ExchangeRatesState>((set) => ({
   rates: [],
@@ -50,12 +39,12 @@ export const useExchangeRatesStore = create<ExchangeRatesState>((set) => ({
       const rates: CurrencyRate[] = [];
       for (const row of json) {
         if (row.currencyCodeB !== 980) continue;
-        const code = NUM_TO_ALPHA[row.currencyCodeA];
+        const code = ISO_4217_NUMERIC[row.currencyCodeA];
         if (!code) continue;
         rates.push({
           code,
-          rateBuy:   row.rateBuy   ?? row.rateCross ?? 0,
-          rateSell:  row.rateSell  ?? row.rateCross ?? 0,
+          rateBuy: row.rateBuy ?? row.rateCross ?? 0,
+          rateSell: row.rateSell ?? row.rateCross ?? 0,
           rateCross: row.rateCross,
         });
       }

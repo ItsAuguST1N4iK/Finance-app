@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getDatabase } from '../db/migrations';
 import { TRANSLATIONS, Language, Translations } from './index';
+import { getLanguage, setLanguage as persistLanguage } from '../db/repos/settings';
 
 interface LanguageContextValue {
   language: Language;
@@ -19,12 +19,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const db = getDatabase();
-      const row = db.getFirstSync<{ language: string | null }>(
-        'SELECT language FROM settings WHERE id = 1'
-      );
-      if (row?.language === 'uk' || row?.language === 'en') {
-        setLanguageState(row.language as Language);
+      const lang = getLanguage();
+      if (lang === 'uk' || lang === 'en') {
+        setLanguageState(lang);
       }
     } catch {}
   }, []);
@@ -32,7 +29,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   function setLanguage(lang: Language) {
     setLanguageState(lang);
     try {
-      getDatabase().runSync('UPDATE settings SET language = ? WHERE id = 1', [lang]);
+      persistLanguage(lang);
     } catch {}
   }
 

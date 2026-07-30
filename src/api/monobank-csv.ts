@@ -2,6 +2,7 @@
  * Monobank CSV export parser
  *
  * Export format from monobank.ua → Виписка → Завантажити CSV
+ * Header includes account currency, e.g. `Card currency amount, (EUR)`.
  */
 
 import Papa from 'papaparse';
@@ -10,13 +11,14 @@ import { makeStableTransactionIds } from '../utils/dedup';
 import { parseAmount } from '../utils/parseAmount';
 import { buildOwnAccountContext, isSelfTransfer } from '../utils/selfTransfer';
 import { resolveImportCategory, categoryFields } from '../utils/categoryDetect';
+import { peekMonobankStatementCurrency } from '../utils/statementCurrency';
 
-export type MonoCsvCurrencyMode = 'account' | 'operation';
+export type MonoCsvCurrencyMode = 'auto' | 'account' | 'operation';
 
 export interface MonoCsvImportOptions {
   /** Which amount/currency columns to use from the CSV */
   currencyMode: MonoCsvCurrencyMode;
-  /** Currency of the linked account (e.g. EUR, UAH) */
+  /** Currency of the linked account (e.g. EUR, UAH). Prefer header detection. */
   accountCurrency: string;
 }
 
@@ -30,6 +32,8 @@ function parseMonoDate(s: string): number {
 
 export interface MonoCsvImportResult {
   transactions: UnifiedTransaction[];
+  /** Detected from header `Card currency amount, (EUR)` etc. */
+  accountCurrency: string;
 }
 
 export function parseMonobankCsv(
@@ -37,14 +41,28 @@ export function parseMonobankCsv(
   internalAccountId: string,
   ownIbans: string[] = [],
   ownAccounts?: Account[],
-  options: MonoCsvImportOptions = { currencyMode: 'account', accountCurrency: 'UAH' },
+  options: Partial<MonoCsvImportOptions> = {},
+  onProgress?: (current: number, total: number) => void,
 ): MonoCsvImportResult {
   const result = Papa.parse<string[]>(csvContent.trim(), {
     skipEmptyLines: true,
   });
 
   const rows = result.data as string[][];
-  if (rows.length < 2) return { transactions: [] };
+  if (rows.length < 2) {
+    return {
+      transactions: [],
+      accountCurrency: options.accountCurrency || 'UAH',
+    };
+  }
+
+  const headerCurrency = peekMonobankStatementCurrency('', csvContent) || undefined;
+  const accountCurrency = (
+    options.accountCurrency
+    || headerCurrency
+    || 'UAH'
+  ).toUpperCase();
+  const currencyMode: MonoCsvCurrencyMode = options.currencyMode ?? 'auto';
 
   const ctx = ownAccounts
     ? buildOwnAccountContext(ownAccounts)
@@ -52,9 +70,13 @@ export function parseMonobankCsv(
 
   const dataRows = rows.slice(1);
   const transactions: UnifiedTransaction[] = [];
-  const accountCurrency = options.accountCurrency || 'UAH';
+  const total = dataRows.length;
 
-  for (const row of dataRows) {
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    if (onProgress && (i % 25 === 0 || i === total - 1)) {
+      onProgress(i + 1, total);
+    }
     if (row.length < 4) continue;
 
     const [
@@ -64,8 +86,8 @@ export function parseMonobankCsv(
     ] = row;
 
     const cardAmount = parseAmount(cardAmountStr);
-    const opAmount   = parseAmount(opAmountStr);
-    const mcc        = parseInt(mccStr ?? '0', 10) || undefined;
+    const opAmount = parseAmount(opAmountStr);
+    const mcc = parseInt(mccStr ?? '0', 10) || undefined;
     const commission = Math.abs(parseAmount(commissionStr));
 
     if (cardAmount === 0 && opAmount === 0) continue;
@@ -79,15 +101,20 @@ export function parseMonobankCsv(
     let amount: number;
     let currency: string;
 
-    if (options.currencyMode === 'operation' && hasOpCurrency) {
+    /**
+     * auto / account → always statement (card) column + statement currency.
+     * Monobank shows card-currency as primary on each statement; op is the other leg.
+     * Preferring op under "auto" previously stored UAH amounts labeled as EUR after repair.
+     */
+    if (currencyMode === 'operation' && hasOpCurrency) {
       amount = Math.abs(opAmount || cardAmount);
-      currency = opCurRaw!;
+      currency = opCurRaw!.toUpperCase();
     } else {
       amount = Math.abs(cardAmount || opAmount);
       currency = accountCurrency;
     }
 
-    const isCancellation = /^Cancellation\./i.test(desc ?? '');
+    const isCancellation = /^Cancellation\.|^Скасування\./i.test(desc ?? '');
     const baseType: UnifiedTransaction['type'] = cardAmount > 0 ? 'income' : 'expense';
     const effectiveType: UnifiedTransaction['type'] = isCancellation ? 'income' : baseType;
 
@@ -112,25 +139,30 @@ export function parseMonobankCsv(
 
     transactions.push({
       id,
-      accountId:       internalAccountId,
-      platform:        'monobank',
+      accountId: internalAccountId,
+      platform: 'monobank',
       externalId,
       type,
       amount,
       currency,
-      feeAmount:       commission,
-      description:     desc || undefined,
+      feeAmount: commission,
+      description: desc || undefined,
       mcc,
-      tag:             tag ?? undefined,
+      tag: tag ?? undefined,
       category,
       transactionDate: date,
-      importedAt:      Date.now(),
-      rawPayload:      JSON.stringify({
-        cardAmount, opAmount, opCurrency: opCurRaw, accountCurrency, exchangeRate: exchangeRateStr,
-        currencyMode: options.currencyMode,
+      importedAt: Date.now(),
+      rawPayload: JSON.stringify({
+        cardAmount,
+        opAmount,
+        opCurrency: opCurRaw,
+        accountCurrency,
+        exchangeRate: exchangeRateStr,
+        currencyMode,
+        headerCurrency: headerCurrency ?? null,
       }),
     });
   }
 
-  return { transactions };
+  return { transactions, accountCurrency };
 }

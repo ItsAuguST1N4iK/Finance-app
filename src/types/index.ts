@@ -76,6 +76,7 @@ export interface UnifiedTransaction {
   description?: string;
   category?: string;   // 'salary' | 'food' | 'dividend' | ...
   tag?: string;        // auto or manually assigned tag
+  categoryLocked?: boolean; // true = user chose category; retag/import must not overwrite
   mcc?: number;        // MCC-код картки (Monobank/PrivatBank)
   counterparty?: string;
   directionFrom?: string;
@@ -145,6 +146,24 @@ export interface CategoryTotal {
   category: string;
   total: number;
   txCount: number;
+}
+
+/** Chart bar used by analytics screen and chart utils (kept out of the store to avoid cycles). */
+export interface ChartBar {
+  label: string;
+  year: number;
+  yearLabel?: string;
+  periodLabel?: string;
+  income: number;
+  expense: number;
+}
+
+/** FX quote from Monobank public rates API. */
+export interface CurrencyRate {
+  code: string;
+  rateBuy: number;
+  rateSell: number;
+  rateCross?: number;
 }
 
 // ─────────────────────────────────────────────
