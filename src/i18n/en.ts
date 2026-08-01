@@ -112,7 +112,7 @@ export const en: Translations = {
   settingsPlatformsHint: 'Tokens are stored in the device\'s secure storage (Keychain / Keystore).',
   settingsAccounts: 'Accounts',
   settingsNoAccounts: 'Your accounts will appear here after connecting a platform and syncing.',
-  settingsAbout: 'Finance Control v10.2.5',
+  settingsAbout: 'Finance Control v10.2.6',
   settingsAboutLocal: 'All data is stored locally on the device.\nNo cloud servers.',
   settingsSyncMono: 'Sync Monobank',
   settingsSyncIbkr: 'Sync IBKR',

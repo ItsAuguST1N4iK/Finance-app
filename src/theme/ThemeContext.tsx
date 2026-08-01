@@ -10,6 +10,7 @@ import {
   setAnimationSpeed as persistAnimationSpeed,
   setGlassPrefs,
 } from '../db/repos/settings';
+import { applyAccentAppIcon } from './accentIcon';
 
 export { THEME_LABELS };
 
@@ -59,10 +60,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [transparencyPct, setTransparencyPctState] = useState(28);
 
   useEffect(() => {
+    let loadedAccent = DEFAULT_ACCENT;
     try {
       const row = getThemePrefs();
       if (row?.theme && row.theme in THEMES) setThemeKeyState(row.theme as ThemeKey);
-      if (row?.accent_color) setAccentState(row.accent_color);
+      if (row?.accent_color) {
+        loadedAccent = row.accent_color;
+        setAccentState(row.accent_color);
+      }
       if (row?.animation_speed != null) setAnimationSpeedState(row.animation_speed);
       if (row?.glass_opacity != null) {
         const legacy = row.glass_opacity;
@@ -71,6 +76,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setTransparencyPctState(0);
       }
     } catch { /* ignore */ }
+    void applyAccentAppIcon(loadedAccent);
   }, []);
 
   const setThemeKey = useCallback((key: ThemeKey) => {
@@ -81,6 +87,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setAccent = useCallback((color: string) => {
     setAccentState(color);
     try { setAccentColor(color); } catch { /* ignore */ }
+    void applyAccentAppIcon(color);
   }, []);
 
   const setAnimationSpeed = useCallback((v: number) => {

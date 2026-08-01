@@ -112,7 +112,7 @@ export const uk: Translations = {
   settingsPlatformsHint: 'Токени зберігаються у захищеному сховищі пристрою (Keychain / Keystore).',
   settingsAccounts: 'Рахунки',
   settingsNoAccounts: 'Після підключення платформи та синхронізації тут зʼявляться ваші рахунки.',
-  settingsAbout: 'Finance Control v10.2.5',
+  settingsAbout: 'Finance Control v10.2.6',
   settingsAboutLocal: 'Весь облік ведеться локально на пристрої.\nХмарних серверів немає.',
   settingsSyncMono: 'Синхронізувати Monobank',
   settingsSyncIbkr: 'Синхронізувати IBKR',

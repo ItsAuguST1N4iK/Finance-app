@@ -2,6 +2,7 @@ node_modules/
 .expo/
 .android-sdk/
 .gradle-home/
+.tmp/
 android/
 ios/
 dist/
@@ -11,3 +12,4 @@ dist/
 *.log
 .env
 .env.*
+*.apk

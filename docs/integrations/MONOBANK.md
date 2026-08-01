@@ -1,4 +1,4 @@
-# MONOBANK Integration — Finance Control v10.2.5
+# MONOBANK Integration — Finance Control v10.2.6
 
 ## Метод доступу
 

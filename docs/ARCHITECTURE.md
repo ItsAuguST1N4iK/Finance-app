@@ -1,4 +1,4 @@
-# ARCHITECTURE — Finance Control v10.2.5
+# ARCHITECTURE — Finance Control v10.2.6
 
 ## Принцип: усе на пристрої
 

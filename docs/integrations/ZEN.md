@@ -1,4 +1,4 @@
-# Zen.com Integration — Finance Control v10.2.5
+# Zen.com Integration — Finance Control v10.2.6
 
 ## Доступні методи
 

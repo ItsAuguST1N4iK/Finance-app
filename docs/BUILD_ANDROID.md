@@ -1,8 +1,8 @@
-# Збірка та встановлення APK — Finance Control 10.2.5
+# Збірка та встановлення APK — Finance Control 10.2.6
 
 ## Готовий APK
 
-`releases/FinanceControl-10.2.5.apk`
+`releases/FinanceControl-10.2.6.apk`
 
 ### Встановлення на Android
 
@@ -24,7 +24,7 @@ eas login
 eas build -p android --profile preview
 ```
 
-У кабінеті Expo з’явиться посилання на `.apk`. Збережіть його як `releases/FinanceControl-10.2.5.apk`.
+У кабінеті Expo з’явиться посилання на `.apk`. Збережіть його як `releases/FinanceControl-10.2.6.apk`.
 
 Профіль `preview` у `eas.json` збирає **APK** для прямої установки.
 
@@ -46,7 +46,7 @@ $env:PATH = "$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:PATH"
 npx expo prebuild -p android --clean
 cd android
 .\gradlew.bat assembleRelease
-copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10.2.5.apk
+copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10.2.6.apk
 ```
 
 Якщо `assembleRelease` вимагає підпис — для внутрішньої роздачі можна використати `assembleDebug` або налаштувати keystore у `android/app`.

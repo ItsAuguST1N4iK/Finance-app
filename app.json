@@ -2,7 +2,7 @@
   "expo": {
     "name": "Finance Control",
     "slug": "finance-control",
-    "version": "10.2.5",
+    "version": "10.2.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -22,9 +22,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundColor": "#3b82f6"
       },
-      "package": "com.financecontrol.app"
+      "package": "com.financecontrol.app",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/icon.png"
@@ -40,7 +41,110 @@
           "color": "#3b82f6"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@howincodes/expo-dynamic-app-icon",
+        {
+          "blue": {
+            "ios": "./assets/icons/blue.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#3b82f6"
+            }
+          },
+          "violet": {
+            "ios": "./assets/icons/violet.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#8b5cf6"
+            }
+          },
+          "cyan": {
+            "ios": "./assets/icons/cyan.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#06b6d4"
+            }
+          },
+          "emerald": {
+            "ios": "./assets/icons/emerald.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#10b981"
+            }
+          },
+          "amber": {
+            "ios": "./assets/icons/amber.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#f59e0b"
+            }
+          },
+          "red": {
+            "ios": "./assets/icons/red.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#ef4444"
+            }
+          },
+          "pink": {
+            "ios": "./assets/icons/pink.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#ec4899"
+            }
+          },
+          "orange": {
+            "ios": "./assets/icons/orange.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#f97316"
+            }
+          },
+          "teal": {
+            "ios": "./assets/icons/teal.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#14b8a6"
+            }
+          },
+          "indigo": {
+            "ios": "./assets/icons/indigo.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#6366f1"
+            }
+          },
+          "lime": {
+            "ios": "./assets/icons/lime.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#84cc16"
+            }
+          },
+          "rose": {
+            "ios": "./assets/icons/rose.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#e11d48"
+            }
+          },
+          "purple": {
+            "ios": "./assets/icons/purple.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#a855f7"
+            }
+          },
+          "sky": {
+            "ios": "./assets/icons/sky.png",
+            "android": {
+              "foregroundImage": "./assets/icons/fg.png",
+              "backgroundColor": "#0ea5e9"
+            }
+          }
+        }
+      ]
     ]
   }
 }

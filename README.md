@@ -1,4 +1,4 @@
-# Finance Control v10.2.5
+# Finance Control v10.2.6
 
 Локальний мобільний застосунок для особистого обліку фінансів (**Android / iOS**, Expo SDK 54 / React Native 0.81).  
 Усі дані зберігаються **лише на пристрої** (SQLite). Власного хмарного бекенду немає.
@@ -45,7 +45,8 @@
 | **Небезпечна зона** | експорт даних / повне скидання |
 
 ### UX
-- Floating tab bar з **плавним перекочуванням** акцентного кола між сторінками + bounce активної іконки
+- Floating tab bar з **плавним перекочуванням** акцентного pill між сторінками + bounce активної іконки
+- **Іконка застосунку** (графік) у стилі додатку; фон збігається з обраним акцентом (нативний APK)
 - Єдині токени дизайну: `radius.md/lg`, `stroke.width` 1.25
 - Спільні bottom sheets (≈75% екрана над таббаром)
 - Спільний Empty State
@@ -106,7 +107,7 @@ npm start
 
 Після збірки:
 
-`releases/FinanceControl-10.2.5.apk`
+`releases/FinanceControl-10.2.6.apk`
 
 Встановлення: скопіюйте на телефон → дозвольте «невідомі джерела» → встановіть.
 
@@ -128,7 +129,7 @@ eas build -p android --profile preview
 npx expo prebuild -p android --clean
 cd android
 .\gradlew.bat assembleRelease
-copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10.2.5.apk
+copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10.2.6.apk
 ```
 
 Покроково: [`docs/BUILD_ANDROID.md`](docs/BUILD_ANDROID.md).
@@ -139,7 +140,7 @@ copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10
 
 | Поле | Значення |
 |---|---|
-| App version | **10.2.5** |
+| App version | **10.2.6** |
 | Expo SDK | 54 |
 | Package | `com.financecontrol.app` |
 

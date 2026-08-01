@@ -1,9 +1,9 @@
 # Releases
 
-Готові бінарники для sideload:
+пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ sideload:
 
-| Файл | Опис |
+| пїЅпїЅпїЅпїЅ | пїЅпїЅпїЅпїЅ |
 |---|---|
-| `FinanceControl-10.2.5.apk` | Android APK (внутрішня / preview збірка) |
+| `FinanceControl-10.2.6.apk` | Android APK (пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ / preview пїЅпїЅпїЅпїЅпїЅ) |
 
-Як зібрати знову: див. [`docs/BUILD_ANDROID.md`](../docs/BUILD_ANDROID.md).
+пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅ. [`docs/BUILD_ANDROID.md`](../docs/BUILD_ANDROID.md).

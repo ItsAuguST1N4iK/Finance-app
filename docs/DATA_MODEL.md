@@ -1,4 +1,4 @@
-# DATA MODEL — Finance Control v10.2.5
+# DATA MODEL — Finance Control v10.2.6
 
 Усі дані зберігаються **виключно у SQLite на пристрої** (`expo-sqlite`). Хмарної БД немає.  
 Токени API — в `expo-secure-store`, не в SQLite.

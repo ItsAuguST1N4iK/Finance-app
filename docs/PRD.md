@@ -1,4 +1,4 @@
-# PRD — Finance Control v10.2.5
+# PRD — Finance Control v10.2.6
 
 ## Продукт
 
