@@ -1,4 +1,4 @@
-# IBKR Integration — Flex Web Service
+# IBKR Integration — Flex Web Service (Finance Control v10.2.5)
 
 ## Метод доступу
 

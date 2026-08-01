@@ -36,13 +36,11 @@ export function PlatformShareBar({ title, items }: { title?: string; items: Plat
         <Text style={[platStyles.subTitle, { color: theme.subtext }]}>{title}</Text>
       ) : null}
       <View style={[platStyles.stackedBar, { backgroundColor: theme.border }]}>
-        {items.map((item) => (
-          item.pct > 0 && (
-            <View
-              key={item.accountId}
-              style={{ width: `${item.pct}%`, backgroundColor: item.color, height: '100%' }}
-            />
-          )
+        {items.filter((item) => item.pct > 0).map((item) => (
+          <View
+            key={item.accountId}
+            style={{ width: `${item.pct}%`, backgroundColor: item.color, height: '100%' }}
+          />
         ))}
       </View>
       {items.map((item) => (

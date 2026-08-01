@@ -3,10 +3,7 @@ import type { SQLiteBindValue } from 'expo-sqlite';
 import type { UnifiedTransaction, Platform, TransactionType } from '../types';
 import { getDatabase } from '../db/migrations';
 import { investmentPurchaseSql } from '../utils/categories';
-import { makeTransactionFingerprint } from '../utils/dedup';
 import { markBalancesDirty } from '../utils/accountBalance';
-
-const PAGE_SIZE = 150;
 
 interface TransactionsFilter {
   platforms?: Platform[];
@@ -182,15 +179,15 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         params,
       );
       const rows = db.getAllSync<Record<string, unknown>>(
-        `SELECT * FROM transactions ${where} ORDER BY transaction_date DESC LIMIT ?`,
-        [...params, PAGE_SIZE],
+        `SELECT * FROM transactions ${where} ORDER BY transaction_date DESC`,
+        params,
       );
       const transactions = rows.map(rowToTx);
       const totalCount = countRow?.cnt ?? transactions.length;
       set({
         transactions,
         totalCount,
-        hasMore: transactions.length < totalCount,
+        hasMore: false,
         isLoading: false,
         dataVersion: get().dataVersion + 1,
       });
@@ -201,25 +198,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   loadMoreTransactions: () => {
-    const { filter, transactions, hasMore, isLoading } = get();
-    if (!hasMore || isLoading) return;
-
-    try {
-      const db = getDatabase();
-      const { where, params } = buildWhere(filter);
-      const rows = db.getAllSync<Record<string, unknown>>(
-        `SELECT * FROM transactions ${where} ORDER BY transaction_date DESC LIMIT ? OFFSET ?`,
-        [...params, PAGE_SIZE, transactions.length],
-      );
-      const more = rows.map(rowToTx);
-      const next = [...transactions, ...more];
-      set({
-        transactions: next,
-        hasMore: next.length < get().totalCount && more.length > 0,
-      });
-    } catch (e) {
-      console.error('[transactionsSlice] loadMoreTransactions error:', e);
-    }
+    // All matching rows load in loadTransactions — no page cap.
   },
 
   getTotalCount: () => {
@@ -238,48 +217,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     let updated = 0;
     const forceInsert = opts?.forceInsert === true;
 
-    const existingFpRows = forceInsert
-      ? []
-      : db.getAllSync<{
-        id: string;
-        account_id: string;
-        platform: string;
-        transaction_date: number;
-        amount: number;
-        currency: string;
-        description: string | null;
-        category_locked: number | null;
-        tag: string | null;
-        category: string | null;
-      }>(
-        `SELECT id, account_id, platform, transaction_date, amount, currency, description,
-                category_locked, tag, category
-         FROM transactions`,
-      );
-    const fpToExisting = new Map<string, {
-      id: string;
-      category_locked: number | null;
-      tag: string | null;
-      category: string | null;
-    }>();
-    for (const row of existingFpRows) {
-      const meta = {
-        id: row.id,
-        category_locked: row.category_locked,
-        tag: row.tag,
-        category: row.category,
-      };
-      const fp = makeTransactionFingerprint(
-        row.account_id,
-        row.platform as UnifiedTransaction['platform'],
-        row.transaction_date,
-        row.amount,
-        row.currency,
-        row.description ?? undefined,
-      );
-      if (!fpToExisting.has(fp)) fpToExisting.set(fp, meta);
-    }
-
+    // Identity merge only by external_id / id (import rows).
+    // Fingerprint / global DB sweeps live only in analyzeImportDuplicates (import UI).
     const findByExternal = db.prepareSync(
       `SELECT id, category_locked, tag, category FROM transactions
        WHERE platform = ? AND external_id = ? LIMIT 1`,
@@ -310,9 +249,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
         for (const tx of txs) {
           try {
             const externalId = normalizeExternalId(tx.externalId);
-            const fp = makeTransactionFingerprint(
-              tx.accountId, tx.platform, tx.transactionDate, tx.amount, tx.currency, tx.description,
-            );
             let existing: {
               id: string;
               category_locked: number | null;
@@ -320,8 +256,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
               category: string | null;
             } | null = null;
 
-            // forceInsert: never merge by fingerprint — always create a new row
-            // (ids/externalIds already reassigned by the import caller)
+            // forceInsert: always create a new row (ids already reassigned by import caller)
             if (!forceInsert) {
               if (externalId) {
                 existing = findByExternal.executeSync<{
@@ -339,9 +274,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
                   category: string | null;
                 }>(tx.id).getFirstSync() ?? null;
               }
-              if (!existing) {
-                existing = fpToExisting.get(fp) ?? null;
-              }
             }
 
             if (existing) {
@@ -358,8 +290,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
                 externalId, existing.id,
               ]);
               updated++;
-              const meta = { ...existing, tag, category };
-              fpToExisting.set(fp, meta);
             } else {
               insertStmt.executeSync([
                 tx.id, tx.accountId, tx.platform, externalId,
@@ -371,13 +301,6 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
                 tx.transactionDate, tx.importedAt, tx.rawPayload ?? null,
               ]);
               inserted++;
-              const meta = {
-                id: tx.id,
-                category_locked: 0,
-                tag: tx.tag ?? null,
-                category: tx.category ?? null,
-              };
-              fpToExisting.set(fp, meta);
             }
           } catch (e) {
             console.warn('[transactionsSlice] skip upsert:', tx.id, e);
@@ -391,7 +314,9 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       insertStmt.finalizeSync();
     }
 
-    if (inserted > 0 || updated > 0) markBalancesDirty();
+    if (inserted > 0 || updated > 0) {
+      markBalancesDirty();
+    }
     get().loadTransactions();
     get().loadRecentTransactions();
     return { inserted, updated, total: txs.length };

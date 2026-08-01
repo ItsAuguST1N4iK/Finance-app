@@ -2,13 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { radius, space, type } from '../../theme/tokens';
+import { radius, space, stroke, type } from '../../theme/tokens';
 
 export interface KpiData {
   label: string;
   value: string;
   color: string;
-  icon: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   sub?: string;
 }
 
@@ -28,15 +28,15 @@ export function KpiCards({ items }: { items: KpiData[] }) {
           <View style={kpiStyles.cardTop}>
             <Text style={[kpiStyles.label, { color: theme.subtext }]}>{item.label}</Text>
             <View style={[kpiStyles.iconWrap, { backgroundColor: item.color + '22' }]}>
-              <Ionicons name={item.icon as any} size={14} color={item.color} />
+              <Ionicons name={item.icon} size={14} color={item.color} />
             </View>
           </View>
           <Text style={[kpiStyles.value, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit>
             {item.value}
           </Text>
-          {item.sub && (
+          {item.sub ? (
             <Text style={[kpiStyles.sub, { color: theme.subtext }]}>{item.sub}</Text>
-          )}
+          ) : null}
         </View>
       ))}
     </View>
@@ -55,6 +55,7 @@ const kpiStyles = StyleSheet.create({
     flexBasis: '47%',
     flexGrow: 1,
     borderRadius: radius.lg,
+    borderWidth: stroke.width,
     padding: 14,
   },
   cardTop: {

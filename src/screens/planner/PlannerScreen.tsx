@@ -1,9 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, FlatList, TouchableOpacity, LayoutAnimation, RefreshControl,
-} from 'react-native';
+import { View, Text, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { usePlannedIncomeStore } from '../../store/plannedIncomeSlice';
 import { useAccountsStore } from '../../store/accountsSlice';
 import { useTheme } from '../../theme/ThemeContext';
@@ -13,16 +10,19 @@ import type { PlannedIncome, Account } from '../../types';
 import { PlannerCard } from './PlannerCard';
 import { PlannerFormModal } from './PlannerFormModal';
 import { styles } from './plannerStyles';
-
-// ─── Planner Screen ───────────────────────────────
+import { layout } from '../../theme/tokens';
+import { SpinAddButton } from '../../components/MotionIcons';
+import { ScreenEnter } from '../../components/ScreenEnter';
+import { AppRefreshControl } from '../../components/AppRefreshControl';
+import { EmptyState } from '../../components/EmptyState';
 
 export function PlannerScreen() {
   const { theme } = useTheme();
-  const { t }     = useLanguage();
+  const { t } = useLanguage();
   const { items, loadItems, updateStatus, cancelItem, deleteItem } = usePlannedIncomeStore();
   const { accounts, loadAccounts } = useAccountsStore();
-  const [showModal, setShowModal]   = useState(false);
-  const [editItem,  setEditItem]    = useState<PlannedIncome | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState<PlannedIncome | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { show, element: alertEl } = useAppAlert();
 
@@ -35,8 +35,8 @@ export function PlannerScreen() {
     setRefreshing(true);
     loadItems();
     loadAccounts(true);
-    setRefreshing(false);
-  }, []);
+    setTimeout(() => setRefreshing(false), 600);
+  }, [loadItems, loadAccounts]);
 
   function handleConfirm(id: string) {
     const item = items.find((i) => i.id === id);
@@ -46,7 +46,6 @@ export function PlannerScreen() {
       {
         text: t.yes,
         onPress: () => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           updateStatus(id, 'received_manual');
         },
       },
@@ -59,7 +58,6 @@ export function PlannerScreen() {
       {
         text: t.cancel, style: 'destructive',
         onPress: () => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           cancelItem(id);
         },
       },
@@ -72,7 +70,6 @@ export function PlannerScreen() {
       {
         text: t.delete, style: 'destructive',
         onPress: () => {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           deleteItem(id);
         },
       },
@@ -89,47 +86,59 @@ export function PlannerScreen() {
     setEditItem(null);
   }
 
-  // Build a map of accountId -> Account for quick lookup
   const accountMap = new Map<string, Account>(accounts.map((a) => [a.id, a]));
-
   const pending = items.filter((i) => i.status === 'pending' || i.status === 'overdue');
-  const done    = items.filter((i) => i.status === 'matched' || i.status === 'received_manual');
+  const done = items.filter((i) => i.status === 'matched' || i.status === 'received_manual');
+  const listData = [...pending, ...done];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
       {alertEl}
-      <FlatList
-        data={[...pending, ...done]}
-        keyExtractor={(i) => i.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
-        renderItem={({ item }) => (
-          <PlannerCard
-            item={item}
-            account={accountMap.get(item.accountId)}
-            onConfirm={handleConfirm}
-            onCancel={handleCancel}
-            onDelete={handleDelete}
-            onEdit={handleEdit}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={48} color={theme.subtext} />
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>Планових записів немає</Text>
-            <Text style={[styles.emptySubtitle, { color: theme.subtext }]}>
-              Додайте очікувані надходження або витрати
-            </Text>
-          </View>
-        }
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-      />
+      <ScreenEnter>
+        <FlatList
+          data={listData}
+          keyExtractor={(i) => i.id}
+          refreshControl={
+            <AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          renderItem={({ item, index }) => (
+            <View>
+              {index === 0 && pending.length > 0 && (
+                <Text style={[styles.sectionLabel, { color: theme.subtext }]}>
+                  {t.plannerStatusPending}
+                </Text>
+              )}
+              {index === pending.length && done.length > 0 && (
+                <Text style={[styles.sectionLabel, { color: theme.subtext, marginTop: 8 }]}>
+                  {t.plannerStatusReceived}
+                </Text>
+              )}
+              <PlannerCard
+                item={item}
+                account={accountMap.get(item.accountId)}
+                onConfirm={handleConfirm}
+                onCancel={handleCancel}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
+            </View>
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="calendar-outline"
+              title={t.plannerEmptyTitle}
+              subtitle={t.plannerEmptyHint}
+            />
+          }
+          contentContainerStyle={{ padding: 16, paddingBottom: layout.listBottom }}
+        />
+      </ScreenEnter>
 
-      <TouchableOpacity
+      <SpinAddButton
         style={[styles.fab, { backgroundColor: theme.accent }]}
         onPress={() => { setEditItem(null); setShowModal(true); }}
-      >
-        <Ionicons name="add" size={28} color={theme.onAccent} />
-      </TouchableOpacity>
+        color={theme.onAccent}
+      />
 
       <PlannerFormModal
         visible={showModal}

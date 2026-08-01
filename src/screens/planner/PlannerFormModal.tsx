@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View, Text, TouchableOpacity, Modal, TextInput, ScrollView, KeyboardAvoidingView,
-} from 'react-native';
+import { View, Text, TextInput, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { PressableScale } from '../../components/PressableScale';
+import { BottomSheetModal } from '../../components/BottomSheetModal';
 import { usePlannedIncomeStore } from '../../store/plannedIncomeSlice';
 import { useAccountsStore } from '../../store/accountsSlice';
 import { useTheme } from '../../theme/ThemeContext';
@@ -11,6 +11,7 @@ import { useAppAlert } from '../../components/AppAlert';
 import type { PlannedIncome, RecurrenceType } from '../../types';
 import { addDays } from 'date-fns';
 import { styles } from './plannerStyles';
+import { commonStyles } from '../../theme/commonStyles';
 
 // ─── Add / Edit Modal ─────────────────────────────
 
@@ -23,21 +24,21 @@ export function PlannerFormModal({
   editItem: PlannedIncome | null;
   onClose: () => void;
 }) {
-  const { theme, cardSurface }  = useTheme();
-  const { t }      = useLanguage();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
   const { addItem, updateItem } = usePlannedIncomeStore();
   const { accounts } = useAccountsStore();
   const { show, element: alertEl } = useAppAlert();
 
-  const [planType,   setPlanType]   = useState<'income' | 'expense'>('income');
-  const [name,       setName]       = useState('');
-  const [amount,     setAmount]     = useState('');
-  const [currency,   setCurrency]   = useState('UAH');
-  const [source,     setSource]     = useState('');
-  const [notes,      setNotes]      = useState('');
-  const [accountId,  setAccountId]  = useState('');
+  const [planType, setPlanType] = useState<'income' | 'expense'>('income');
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('UAH');
+  const [source, setSource] = useState('');
+  const [notes, setNotes] = useState('');
+  const [accountId, setAccountId] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceType>('once');
-  const [daysAhead,  setDaysAhead]  = useState('7');
+  const [daysAhead, setDaysAhead] = useState('7');
 
   const isEdit = editItem !== null;
 
@@ -91,7 +92,7 @@ export function PlannerFormModal({
         amount: parseFloat(amount.replace(',', '.')),
         currency,
         source: source.trim() || undefined,
-        notes:  notes.trim() || undefined,
+        notes: notes.trim() || undefined,
         expectedDate,
         recurrence,
       });
@@ -103,7 +104,7 @@ export function PlannerFormModal({
         amount: parseFloat(amount.replace(',', '.')),
         currency,
         source: source.trim() || undefined,
-        notes:  notes.trim() || undefined,
+        notes: notes.trim() || undefined,
         expectedDate,
         notifyDaysBefore: 1,
         recurrence,
@@ -115,157 +116,150 @@ export function PlannerFormModal({
 
   const visibleAccounts = accounts.filter((a) => a.id !== 'acc_default');
   const isExpense = planType === 'expense';
+  const title = isEdit
+    ? t.plannerEditTitle
+    : (isExpense ? t.plannerAddExpense : t.plannerAddIncome);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+    <>
       {alertEl}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-      <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
-        <View style={[styles.modalCard, cardSurface()]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              {isEdit ? t.plannerEditTitle : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}
+      <BottomSheetModal
+        visible={visible}
+        onClose={onClose}
+        title={title}
+        scroll
+        footer={(
+          <PressableScale
+            style={[
+              commonStyles.footerBtnPrimarySolo,
+              { backgroundColor: isExpense ? theme.expense : theme.income },
+            ]}
+            onPress={handleSave}
+          >
+            <Text style={[commonStyles.footerBtnTextPrimary, { color: theme.onAccent }]}>
+              {isEdit ? t.save : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}
             </Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={theme.text} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Plan type toggle */}
-          <View style={[styles.typeToggleRow, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
-            <TouchableOpacity
-              style={[styles.typeBtn, !isExpense && { backgroundColor: theme.income }]}
-              onPress={() => setPlanType('income')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="arrow-down-circle-outline" size={16} color={!isExpense ? theme.onAccent : theme.subtext} />
-              <Text style={[styles.typeBtnText, { color: !isExpense ? theme.onAccent : theme.subtext }]}>
-                {t.plannerIncome}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.typeBtn, isExpense && { backgroundColor: theme.expense }]}
-              onPress={() => setPlanType('expense')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="arrow-up-circle-outline" size={16} color={isExpense ? theme.onAccent : theme.subtext} />
-              <Text style={[styles.typeBtnText, { color: isExpense ? theme.onAccent : theme.subtext }]}>
-                {t.plannerExpense}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={[styles.label, { color: theme.subtext }]}>Назва *</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder={t.plannerNamePlaceholder}
-              placeholderTextColor={theme.subtext}
-              value={name}
-              onChangeText={setName}
-            />
-
-            <Text style={[styles.label, { color: theme.subtext }]}>Сума *</Text>
-            <View style={styles.amountRow}>
-              <TextInput
-                style={[styles.input, { flex: 1, backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-                placeholder="0.00"
-                placeholderTextColor={theme.subtext}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-              />
-              <TouchableOpacity
-                style={[styles.currencyBtn, { backgroundColor: theme.accent }]}
-                onPress={() => setCurrency(currency === 'UAH' ? 'USD' : currency === 'USD' ? 'EUR' : 'UAH')}
-              >
-                <Text style={[styles.currencyText, { color: theme.onAccent }]}>{currency}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Account picker */}
-            {visibleAccounts.length > 0 && (
-              <>
-                <Text style={[styles.label, { color: theme.subtext }]}>{t.plannerAccount}</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {visibleAccounts.map((a) => (
-                    <TouchableOpacity
-                      key={a.id}
-                      style={[styles.accountBtn,
-                        { backgroundColor: theme.bg, borderColor: theme.border },
-                        a.id === accountId && { backgroundColor: theme.accent, borderColor: theme.accent }]}
-                      onPress={() => setAccountId(a.id)}
-                    >
-                      <Text style={[styles.accountBtnText, { color: theme.text },
-                        a.id === accountId && { color: theme.onAccent }]}>
-                        {a.displayName ?? a.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            )}
-
-            <Text style={[styles.label, { color: theme.subtext }]}>Очікується через (дні)</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder="7"
-              placeholderTextColor={theme.subtext}
-              value={daysAhead}
-              onChangeText={setDaysAhead}
-              keyboardType="number-pad"
-            />
-
-            <Text style={[styles.label, { color: theme.subtext }]}>
-              {isExpense ? t.plannerSourceLabelExpense : t.plannerSourceLabelIncome}
+          </PressableScale>
+        )}
+      >
+        <View style={[styles.typeToggleRow, { backgroundColor: theme.cardAlt, borderColor: theme.border }]}>
+          <PressableScale
+            style={[styles.typeBtn, !isExpense && { backgroundColor: theme.income }]}
+            onPress={() => setPlanType('income')}
+          >
+            <Ionicons name="arrow-down-circle-outline" size={16} color={!isExpense ? theme.onAccent : theme.subtext} />
+            <Text style={[styles.typeBtnText, { color: !isExpense ? theme.onAccent : theme.subtext }]}>
+              {t.plannerIncome}
             </Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder={isExpense ? t.plannerSourcePlaceholderExpense : t.plannerSourcePlaceholderIncome}
-              placeholderTextColor={theme.subtext}
-              value={source}
-              onChangeText={setSource}
-            />
-
-            <Text style={[styles.label, { color: theme.subtext }]}>Нотатки</Text>
-            <TextInput
-              style={[styles.input, { height: 80, backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
-              placeholder={t.plannerCommentPlaceholder}
-              placeholderTextColor={theme.subtext}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-            />
-
-            <Text style={[styles.label, { color: theme.subtext }]}>Повторення</Text>
-            <View style={styles.recurrenceRow}>
-              {(Object.keys(RECURRENCE_LABELS) as RecurrenceType[]).map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.recBtn, { borderColor: theme.border },
-                    recurrence === r && { backgroundColor: theme.accent, borderColor: theme.accent }]}
-                  onPress={() => setRecurrence(r)}
-                >
-                  <Text style={[styles.recBtnText, { color: theme.subtext },
-                    recurrence === r && { color: theme.onAccent }]}>
-                    {RECURRENCE_LABELS[r]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.addBtn, { backgroundColor: isExpense ? theme.expense : theme.income }]}
-              onPress={handleSave}
-            >
-              <Text style={[styles.addBtnText, { color: theme.onAccent }]}>
-                {isEdit ? t.save : (isExpense ? t.plannerAddExpense : t.plannerAddIncome)}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
+          </PressableScale>
+          <PressableScale
+            style={[styles.typeBtn, isExpense && { backgroundColor: theme.expense }]}
+            onPress={() => setPlanType('expense')}
+          >
+            <Ionicons name="arrow-up-circle-outline" size={16} color={isExpense ? theme.onAccent : theme.subtext} />
+            <Text style={[styles.typeBtnText, { color: isExpense ? theme.onAccent : theme.subtext }]}>
+              {t.plannerExpense}
+            </Text>
+          </PressableScale>
         </View>
-      </View>
-      </KeyboardAvoidingView>
-    </Modal>
+
+        <Text style={[styles.label, { color: theme.subtext }]}>Назва *</Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+          placeholder={t.plannerNamePlaceholder}
+          placeholderTextColor={theme.subtext}
+          value={name}
+          onChangeText={setName}
+        />
+
+        <Text style={[styles.label, { color: theme.subtext }]}>Сума *</Text>
+        <View style={styles.amountRow}>
+          <TextInput
+            style={[styles.input, { flex: 1, backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+            placeholder="0.00"
+            placeholderTextColor={theme.subtext}
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+          />
+          <PressableScale
+            style={[styles.currencyBtn, { backgroundColor: theme.accent }]}
+            onPress={() => setCurrency(currency === 'UAH' ? 'USD' : currency === 'USD' ? 'EUR' : 'UAH')}
+          >
+            <Text style={[styles.currencyText, { color: theme.onAccent }]}>{currency}</Text>
+          </PressableScale>
+        </View>
+
+        {visibleAccounts.length > 0 && (
+          <>
+            <Text style={[styles.label, { color: theme.subtext }]}>{t.plannerAccount}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {visibleAccounts.map((a) => (
+                <PressableScale
+                  key={a.id}
+                  style={[styles.accountBtn,
+                    { backgroundColor: theme.bg, borderColor: theme.border },
+                    a.id === accountId && { backgroundColor: theme.accent, borderColor: theme.accent }]}
+                  onPress={() => setAccountId(a.id)}
+                >
+                  <Text style={[styles.accountBtnText, { color: theme.text },
+                    a.id === accountId && { color: theme.onAccent }]}>
+                    {a.displayName ?? a.name}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        <Text style={[styles.label, { color: theme.subtext }]}>Очікується через (дні)</Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+          placeholder="7"
+          placeholderTextColor={theme.subtext}
+          value={daysAhead}
+          onChangeText={setDaysAhead}
+          keyboardType="number-pad"
+        />
+
+        <Text style={[styles.label, { color: theme.subtext }]}>
+          {isExpense ? t.plannerSourceLabelExpense : t.plannerSourceLabelIncome}
+        </Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+          placeholder={isExpense ? t.plannerSourcePlaceholderExpense : t.plannerSourcePlaceholderIncome}
+          placeholderTextColor={theme.subtext}
+          value={source}
+          onChangeText={setSource}
+        />
+
+        <Text style={[styles.label, { color: theme.subtext }]}>Нотатки</Text>
+        <TextInput
+          style={[styles.input, { height: 80, backgroundColor: theme.inputBg, color: theme.text, borderColor: theme.border }]}
+          placeholder={t.plannerCommentPlaceholder}
+          placeholderTextColor={theme.subtext}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+        />
+
+        <Text style={[styles.label, { color: theme.subtext }]}>Повторення</Text>
+        <View style={styles.recurrenceRow}>
+          {(Object.keys(RECURRENCE_LABELS) as RecurrenceType[]).map((r) => (
+            <PressableScale
+              key={r}
+              style={[styles.recBtn, { borderColor: theme.border },
+                recurrence === r && { backgroundColor: theme.accent, borderColor: theme.accent }]}
+              onPress={() => setRecurrence(r)}
+            >
+              <Text style={[styles.recBtnText, { color: theme.subtext },
+                recurrence === r && { color: theme.onAccent }]}>
+                {RECURRENCE_LABELS[r]}
+              </Text>
+            </PressableScale>
+          ))}
+        </View>
+      </BottomSheetModal>
+    </>
   );
 }

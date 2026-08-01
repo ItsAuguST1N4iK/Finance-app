@@ -15,6 +15,8 @@ export interface RetagResult {
   currencyFixed: number;
 }
 
+const RETAG_CHUNK = 300;
+
 /** Keep SQLite `type` aligned with the assigned category tag. */
 export function typeForCategory(cat: string, currentType: string): TransactionType {
   switch (cat) {
@@ -54,8 +56,14 @@ export function typeForCategory(cat: string, currentType: string): TransactionTy
   }
 }
 
-/** Re-assign tag + category (+ type) for unlocked transactions only. */
-export function retagAllTransactions(accounts: Account[]): RetagResult {
+/**
+ * Re-assign tag + category (+ type) for unlocked transactions only.
+ * Yields between chunks so the UI can paint progress.
+ */
+export async function retagAllTransactions(
+  accounts: Account[],
+  onProgress?: (current: number, total: number, detail?: string) => void,
+): Promise<RetagResult> {
   ensureEssentialCategoryRules();
   repairIbkrInvestments();
   const currencyRepair = repairCurrencyMismatches();
@@ -88,29 +96,37 @@ export function retagAllTransactions(accounts: Account[]): RetagResult {
 
   let changed = 0;
   let skippedLocked = 0;
-  db.withTransactionSync(() => {
-    for (const row of rows) {
-      if (row.category_locked) {
-        skippedLocked++;
-        continue;
+  const total = rows.length;
+  onProgress?.(0, Math.max(1, total), 'retag');
+
+  for (let i = 0; i < rows.length; i += RETAG_CHUNK) {
+    const chunk = rows.slice(i, i + RETAG_CHUNK);
+    db.withTransactionSync(() => {
+      for (const row of chunk) {
+        if (row.category_locked) {
+          skippedLocked++;
+          continue;
+        }
+        const catKey = categoryForRetag(
+          { ...row, platform: row.platform as Platform },
+          ownIbans,
+          accounts,
+          rules,
+        );
+        const nextType = typeForCategory(catKey, row.type);
+        if (row.tag === catKey && row.category === catKey && row.type === nextType) {
+          continue;
+        }
+        db.runSync(
+          'UPDATE transactions SET tag = ?, category = ?, type = ? WHERE id = ?',
+          [catKey, catKey, nextType, row.id],
+        );
+        changed++;
       }
-      const catKey = categoryForRetag(
-        { ...row, platform: row.platform as Platform },
-        ownIbans,
-        accounts,
-        rules,
-      );
-      const nextType = typeForCategory(catKey, row.type);
-      if (row.tag === catKey && row.category === catKey && row.type === nextType) {
-        continue;
-      }
-      db.runSync(
-        'UPDATE transactions SET tag = ?, category = ?, type = ? WHERE id = ?',
-        [catKey, catKey, nextType, row.id],
-      );
-      changed++;
-    }
-  });
+    });
+    onProgress?.(Math.min(i + RETAG_CHUNK, total), Math.max(1, total), 'retag');
+    await new Promise<void>((r) => setTimeout(r, 0));
+  }
 
   // Final pass: SELL must never remain investment (overrides Buy|Sell user rules)
   repairIbkrInvestments();

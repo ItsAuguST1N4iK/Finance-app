@@ -1,14 +1,14 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import type { Account } from '../types';
 import { currencySymbol } from '../utils/currency';
 import { numberLocale } from '../utils/locale';
 import { useLanguage } from '../i18n/LanguageContext';
 import { HIT_ICON } from '../utils/hitSlop';
+import { WiggleActionIcon } from './MotionIcons';
 
 interface Props {
   account: Account;
@@ -47,9 +47,13 @@ export function AccountCard({ account, onEdit }: Props) {
             <Text style={[styles.platform, { color: cardColor }]}>
               {account.platform.toUpperCase()}
             </Text>
-            <TouchableOpacity onPress={onEdit} hitSlop={HIT_ICON} activeOpacity={0.75}>
-              <Ionicons name="pencil-outline" size={14} color={theme.subtext} />
-            </TouchableOpacity>
+            <WiggleActionIcon
+              name="pencil-outline"
+              size={14}
+              color={theme.accent}
+              onPress={onEdit}
+              hitSlop={HIT_ICON}
+            />
           </View>
           <Text style={[styles.balance, { color: theme.text }]}>
             {account.balance != null

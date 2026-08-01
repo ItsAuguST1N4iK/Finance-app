@@ -1,90 +1,178 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 import {
-  Modal, View, Text, StyleSheet, TouchableOpacity, Animated,
-  KeyboardAvoidingView, Platform, ScrollView, type ViewStyle,
+  Modal, View, Text, StyleSheet, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ScrollView, useWindowDimensions, type ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { layout, radius, space, type } from '../theme/tokens';
+import { layout, space, stroke, type } from '../theme/tokens';
+import {
+  SHEET_INSET, SHEET_RADIUS, sheetMaxPx, sheetTabClearance,
+} from '../theme/sheet';
+import { useOverlayPresence } from './useOverlayPresence';
+
+export { SHEET_MAX_SCREEN_RATIO } from '../theme/sheet';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
+  onClosed?: () => void;
   title?: string;
   subtitle?: string;
   children: React.ReactNode;
+  /** @deprecated Sheets always scroll when content exceeds the cap. */
   scroll?: boolean;
+  /** @deprecated Ignored — global cap is always 75% of screen from the bottom. */
   maxHeight?: number | `${number}%`;
   footer?: React.ReactNode;
   sheetStyle?: ViewStyle;
+  /**
+   * When false, children render without an outer ScrollView (nested FlatList).
+   * Pass a maxHeight on your list so it can scroll inside the 75% cap.
+   */
+  bodyScroll?: boolean;
 }
 
+/**
+ * Unified bottom sheet — content-sized, max 75% screen, parks above tab bar.
+ */
 export function BottomSheetModal({
-  visible, onClose, title, subtitle, children,
-  scroll = false, maxHeight = '90%', footer, sheetStyle,
+  visible, onClose, onClosed, title, subtitle, children,
+  footer, sheetStyle, bodyScroll = true,
 }: Props) {
-  const { theme, cardSurface } = useTheme();
-  const [mounted, setMounted] = useState(visible);
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(40)).current;
+  const { theme, animationSpeed } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
 
-  useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      Animated.parallel([
-        Animated.timing(backdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.spring(sheetTranslateY, { toValue: 0, useNativeDriver: true, friction: 9, tension: 80 }),
-      ]).start();
-    } else if (mounted) {
-      Animated.parallel([
-        Animated.timing(backdropOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
-        Animated.timing(sheetTranslateY, { toValue: 40, duration: 180, useNativeDriver: true }),
-      ]).start(({ finished }) => {
-        if (finished) setMounted(false);
-      });
-    }
-  }, [visible, mounted, backdropOpacity, sheetTranslateY]);
+  const sheetBottom = sheetTabClearance(insets.bottom);
+  const sheetMaxH = sheetMaxPx(winH, {
+    topInset: Math.max(insets.top, 8),
+    bottomInset: insets.bottom,
+  });
 
-  if (!visible && !mounted) return null;
+  const headerReserve = (title || subtitle) ? 72 : 0;
+  const footerReserve = footer ? 64 : 0;
+  const bodyMaxH = Math.max(120, sheetMaxH - headerReserve - footerReserve - layout.sheetPad * 2);
 
-  const sheetBody = scroll ? (
-    <ScrollView
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      style={{ maxHeight }}
-    >
-      {children}
-    </ScrollView>
-  ) : children;
+  const {
+    present, heavy, closing, clipH, noteShellHeight,
+    backdropOpacity, reveal, shellHeight, contentOpacity,
+  } = useOverlayPresence({
+    visible,
+    animationSpeed,
+    fallbackHeight: Math.min(220, sheetMaxH),
+    onClosed,
+  });
+
+  const boxH = Math.min(Math.max(clipH, 1), sheetMaxH);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+
+  const panelStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: (1 - reveal.value) * shellHeight.value }],
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+  }));
+
+  if (!present) return null;
 
   return (
-    <Modal visible={visible || mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.flex}>
-          <Animated.View style={[s.backdrop, { opacity: backdropOpacity, backgroundColor: theme.overlay }]}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={s.flex} pointerEvents="box-none">
+          <Animated.View
+            style={[
+              s.backdrop,
+              { backgroundColor: theme.isDark ? 'rgba(0,0,0,0.55)' : 'rgba(15,23,42,0.4)' },
+              backdropStyle,
+            ]}
+          >
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={onClose}
+              disabled={closing}
+            />
           </Animated.View>
 
-          <Animated.View style={[
-            s.sheet,
-            cardSurface(),
-            { borderColor: theme.border, maxHeight, transform: [{ translateY: sheetTranslateY }] },
-            sheetStyle,
-          ]}>
-            {(title || subtitle) && (
-              <View style={s.header}>
-                <View style={s.headerText}>
-                  {title ? <Text style={[s.title, { color: theme.text }]}>{title}</Text> : null}
-                  {subtitle ? <Text style={[s.subtitle, { color: theme.subtext }]}>{subtitle}</Text> : null}
+          <View
+            style={[
+              s.clip,
+              { maxHeight: sheetMaxH, marginBottom: sheetBottom },
+              // Prefer measured height, but never force a tall empty shell
+              clipH > 0 ? { height: boxH } : null,
+            ]}
+            pointerEvents="box-none"
+          >
+            {heavy ? (
+              <Animated.View
+                style={[
+                  s.panel,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    maxHeight: sheetMaxH,
+                  },
+                  sheetStyle,
+                  panelStyle,
+                ]}
+                onLayout={(e) => {
+                  if (closing) return;
+                  const h = Math.ceil(e.nativeEvent.layout.height);
+                  if (h > 0) noteShellHeight(Math.min(h, sheetMaxH));
+                }}
+              >
+                <View style={s.sheetInner}>
+                  <Animated.View style={contentStyle}>
+                    {(title || subtitle) ? (
+                      <View style={s.header}>
+                        {title ? (
+                          <Text style={[s.title, { color: theme.text }]} numberOfLines={1}>
+                            {title}
+                          </Text>
+                        ) : null}
+                        {subtitle ? (
+                          <Text style={[s.subtitle, { color: theme.subtext }]}>{subtitle}</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {bodyScroll ? (
+                      <ScrollView
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator
+                        nestedScrollEnabled
+                        bounces
+                        style={{ maxHeight: bodyMaxH }}
+                        contentContainerStyle={s.scrollContent}
+                        scrollEnabled
+                        scrollIndicatorInsets={{ right: 2 }}
+                      >
+                        {children}
+                      </ScrollView>
+                    ) : (
+                      <View style={{ maxHeight: bodyMaxH, overflow: 'hidden' }}>
+                        {children}
+                      </View>
+                    )}
+                  </Animated.View>
+
+                  {footer ? <View style={s.footer}>{footer}</View> : null}
                 </View>
-                <TouchableOpacity onPress={onClose} style={s.closeBtn} activeOpacity={0.75}>
-                  <Ionicons name="close" size={22} color={theme.subtext} />
-                </TouchableOpacity>
-              </View>
-            )}
-            {sheetBody}
-            {footer}
-          </Animated.View>
+              </Animated.View>
+            ) : null}
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -94,22 +182,37 @@ export function BottomSheetModal({
 const s = StyleSheet.create({
   flex: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFillObject },
-  sheet: {
-    borderTopLeftRadius: radius.sheet,
-    borderTopRightRadius: radius.sheet,
-    borderTopWidth: 1,
-    padding: layout.sheetPad,
-    paddingBottom: Platform.OS === 'ios' ? space[6] + 4 : layout.sheetPad,
+  clip: {
+    marginHorizontal: SHEET_INSET,
+    overflow: 'hidden',
+    borderRadius: SHEET_RADIUS,
+  },
+  panel: {
+    borderRadius: SHEET_RADIUS,
+    borderWidth: stroke.width,
+    overflow: 'hidden',
+    elevation: 0,
+  },
+  sheetInner: {
+    paddingHorizontal: layout.sheetPad,
+    paddingTop: layout.sheetPad,
+    paddingBottom: space[3],
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
     marginBottom: space[3],
-    gap: space[3],
   },
-  headerText: { flex: 1 },
   title: { ...type.title },
-  subtitle: { fontSize: 12, marginTop: 4, lineHeight: 17 },
-  closeBtn: { padding: space[1] },
+  subtitle: { ...type.meta, marginTop: 4, lineHeight: 17 },
+  scrollContent: {
+    flexGrow: 0,
+    paddingBottom: space[2],
+    // Keep values clear of the scrollbar track
+    paddingRight: layout.scrollGutter,
+  },
+  footer: {
+    marginTop: space[2],
+    paddingTop: space[2],
+    flexGrow: 0,
+    flexShrink: 0,
+  },
 });

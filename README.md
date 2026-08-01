@@ -1,67 +1,151 @@
-# Finance Control — Mobile App
+# Finance Control v10.2.5
 
-Особистий фінансовий менеджер для відстеження рахунків у **Monobank**, **IBKR**, **PrivatBank** та **Zen.com** з уніфікованою аналітикою, плануванням майбутніх надходжень і детальним обліком комісій.
-
-Усе працює **повністю на пристрої** — без власного сервера та хмарної бази даних. Дані зберігаються у SQLite, токени — у захищеному сховищі ОС (Keychain / Keystore).
+Локальний мобільний застосунок для особистого обліку фінансів (**Android / iOS**, Expo SDK 54 / React Native 0.81).  
+Усі дані зберігаються **лише на пристрої** (SQLite). Власного хмарного бекенду немає.
 
 ---
 
-## Можливості
+## Що вміє застосунок
 
-| Функція | Статус |
+### Головна
+- Сумарний баланс у домашній валюті (з конвертацією за курсами)
+- Картки рахунків (колір, назва, баланс) + швидке додавання
+- Віджет курсів валют з оновленням
+- Нагадування з Планера (очікувані / прострочені)
+- Стрічка останніх транзакцій з детальним переглядом
+
+### Транзакції
+- Повний список без штучного ліміту сторінки
+- Пошук за описом
+- Фільтри: платформи, рахунки, категорії, типи, валюти, діапазон дат
+- Деталі: комісії, угода (IBKR BUY/SELL), поля виписки без дублювання
+- Зміна категорії / автокатегоризація за правилами
+
+### Планер
+- Планові доходи та витрати (разові / повторювані)
+- Підтвердження, скасування, редагування
+- Локальні push-нагадування
+
+### Аналітика
+- Періоди: цей/минулий місяць, цей/минулий рік, увесь час, власний діапазон
+- KPI: доходи, витрати, комісії, чистий потік за період
+- Графік доходів і витрат
+- Розподіл за платформами та рахунками
+- Топ категорій з drill-down
+- Оцінка IBKR-портфеля з імпортованих угод
+- Тогл «враховувати перекази між власними рахунками»
+
+### Налаштування
+| Розділ | Можливості |
 |---|---|
-| Синхронізація Monobank (прямий API) | MVP |
-| Синхронізація IBKR Flex Web Service (прямий API) | MVP |
-| PrivatBank через Salt Edge AISP (прямий API) | MVP |
-| Zen.com CSV-імпорт (локальний парсинг) | MVP |
-| **Планер майбутніх надходжень** | MVP |
-| **Аналітика по платформах / місяць / рік** | MVP |
-| Розрахунок і відображення комісій | MVP |
-| Офлайн-доступ до всіх даних | MVP |
-| ФОП-режим (PrivatBank AutoClient) | Майбутнє |
-| Zen Payments API | Майбутнє |
+| **Вигляд** | 4 теми, акцент, прозорість карток, швидкість анімацій, підписи табів |
+| **Переваги** | uk/en, домашня валюта, валюти курсів, біометричний замок |
+| **Платформи** | Monobank API/CSV, IBKR Flex/CSV, Zen CSV, PrivatBank CSV/XLS |
+| **Картки та категорії** | рахунки, власні категорії, правила, автоretag |
+| **Небезпечна зона** | експорт даних / повне скидання |
+
+### UX
+- Floating tab bar з **плавним перекочуванням** акцентного кола між сторінками + bounce активної іконки
+- Єдині токени дизайну: `radius.md/lg`, `stroke.width` 1.25
+- Спільні bottom sheets (≈75% екрана над таббаром)
+- Спільний Empty State
+- Біометрія при старті та після повернення з фону
 
 ---
 
-## Швидкий старт для розробника
+## Інтеграції
+
+| Джерело | Спосіб | Примітка |
+|---|---|---|
+| Monobank | API-токен + CSV | API ≈90 днів історії |
+| Interactive Brokers | Flex Web Service + Trade History CSV | EXECUTION / DETAIL |
+| Zen.com | CSV виписка | Локальний парсер |
+| PrivatBank | CSV / XLS | Локальний імпорт |
+| Курси FX | Зовнішній API | Віджет на Головній |
+
+Деталі: [`docs/integrations/`](docs/integrations/).
+
+---
+
+## Технології
+
+| Шар | Стек |
+|---|---|
+| UI | React Native 0.81 · Expo SDK 54 |
+| Навігація | React Navigation + `IslandTabBar` |
+| Стан | Zustand |
+| БД | expo-sqlite |
+| Токени | expo-secure-store |
+| Біометрія | expo-local-authentication |
+| Анімації | react-native-reanimated 4 |
+| Графіки | react-native-svg |
+
+- Архітектура: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Модель даних: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- PRD: [`docs/PRD.md`](docs/PRD.md)
+- Збірка Android: [`docs/BUILD_ANDROID.md`](docs/BUILD_ANDROID.md)
+
+---
+
+## Швидкий старт (розробка)
 
 ```bash
-# Клонуємо репозиторій
-git clone https://github.com/your-org/finance-app.git
-cd finance-app
-
-# Встановлюємо залежності
+git clone <repo-url>
+cd Finance-app
 npm install
-
-# Запускаємо Expo
-npx expo start
+npm start
 ```
 
-Сервер не потрібен. Токени вводяться в застосунку через екран Налаштувань і зберігаються у захищеному сховищі пристрою.
+Далі — Expo Go або емулятор. API-токени зберігаються лише в Secure Store на пристрої.
 
 ---
 
-## Документація
+## APK для Android (sideload)
 
-| Документ | Призначення |
+### Готовий файл
+
+Після збірки:
+
+`releases/FinanceControl-10.2.5.apk`
+
+Встановлення: скопіюйте на телефон → дозвольте «невідомі джерела» → встановіть.
+
+### Зібрати через EAS (хмара)
+
+```bash
+npm install -g eas-cli
+eas login
+eas build -p android --profile preview
+```
+
+Профіль `preview` у `eas.json` видає **APK** (не AAB).
+
+### Зібрати локально (Gradle)
+
+Потрібні Android SDK + **JDK 17**:
+
+```bash
+npx expo prebuild -p android --clean
+cd android
+.\gradlew.bat assembleRelease
+copy app\build\outputs\apk\release\app-release.apk ..\releases\FinanceControl-10.2.5.apk
+```
+
+Покроково: [`docs/BUILD_ANDROID.md`](docs/BUILD_ANDROID.md).
+
+---
+
+## Версія
+
+| Поле | Значення |
 |---|---|
-| [PRD](docs/PRD.md) | Вимоги до продукту, user stories, екрани |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Локальна архітектура без сервера, tech stack, діаграми |
-| [DATA_MODEL](docs/DATA_MODEL.md) | SQLite схема: транзакції, планові надходження, аналітика |
-| [FEE_CALCULATION](docs/FEE_CALCULATION.md) | Правила обчислення комісій по платформах |
-| [MONOBANK](docs/integrations/MONOBANK.md) | Інтеграція Monobank API (прямі запити) |
-| [IBKR](docs/integrations/IBKR.md) | Інтеграція IBKR Flex Web Service |
-| [PRIVATBANK](docs/integrations/PRIVATBANK.md) | Інтеграція PrivatBank / Salt Edge |
-| [ZEN](docs/integrations/ZEN.md) | Інтеграція Zen.com CSV |
+| App version | **10.2.5** |
+| Expo SDK | 54 |
+| Package | `com.financecontrol.app` |
 
 ---
 
-## Стек технологій
+## Ліцензія / приватність
 
-- **Mobile:** React Native + Expo (iOS & Android)
-- **База даних:** SQLite на пристрої (`expo-sqlite`)
-- **Токени:** `expo-secure-store` (Keychain / Keystore)
-- **Фонова синхронізація:** `expo-background-fetch` + `expo-task-manager`
-- **Нотифікації:** `expo-notifications` (локальні, без сервера)
-- **State:** Zustand
-- **Авторизація:** `expo-local-authentication` (Face ID / Fingerprint / PIN)
+Дані та токени не відправляються на ваш власний сервер — його немає.  
+Зовнішні запити йдуть лише до обраних вами API (банк / брокер / FX) за вашою дією.

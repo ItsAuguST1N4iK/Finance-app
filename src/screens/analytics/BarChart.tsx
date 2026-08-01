@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { Svg, Rect, Text as SvgText, Line, Path } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { fps60, fpsEasing, speedMs } from '../../theme/fps60';
 import type { ChartBar } from '../../types';
 import { computeYearBands, computePerBarBands, isYearGranularity, type ChartGranularity } from '../../utils/chartGranularity';
 import { smoothBezierPath } from './smoothBezierPath';
@@ -14,7 +20,27 @@ export function BarChart({ bars, subTextColor, width, granularity, periodFooter 
   granularity: ChartGranularity;
   periodFooter?: string;
 }) {
-  const { theme } = useTheme();
+  const { theme, animationSpeed } = useTheme();
+  const draw = useSharedValue(0);
+  const speedRef = React.useRef(animationSpeed);
+  speedRef.current = animationSpeed;
+  const first = bars[0];
+  const last = bars[bars.length - 1];
+  const seriesKey = `${granularity}:${bars.length}:${first?.label ?? ''}:${last?.label ?? ''}`;
+
+  useEffect(() => {
+    draw.value = 0;
+    draw.value = withTiming(1, {
+      duration: speedMs(fps60.contentIn, speedRef.current),
+      easing: fpsEasing.out,
+    });
+  }, [seriesKey, draw]);
+
+  const drawStyle = useAnimatedStyle(() => ({
+    opacity: draw.value,
+  }));
+
+  // Hooks above must run unconditionally; empty chart still mounts a no-op style.
   if (bars.length === 0) return null;
 
   const height = 218;
@@ -78,104 +104,106 @@ export function BarChart({ bars, subTextColor, width, granularity, periodFooter 
   const expenseAreaPath = expensePath + ` L ${expensePts[expensePts.length - 1].x},${baseline} L ${expensePts[0].x},${baseline} Z`;
 
   return (
-    <Svg width={width} height={height}>
-      {guideLines.map((gl, idx) => (
-        <React.Fragment key={idx}>
-          <Line
-            x1={padL} y1={gl.y}
-            x2={width - padR} y2={gl.y}
-            stroke={subTextColor} strokeWidth={0.4} opacity={0.2}
-            strokeDasharray="4,4"
-          />
-        </React.Fragment>
-      ))}
-      <Path d={incomeAreaPath}  fill={theme.income}  opacity={0.08} />
-      <Path d={expenseAreaPath} fill={theme.expense} opacity={0.08} />
-      {bars.map((bar, i) => {
-        const groupX    = padL + i * groupW;
-        const incomeH   = Math.max(2, (bar.income / maxVal) * chartH);
-        const expenseH  = Math.max(2, (bar.expense / maxVal) * chartH);
-        const centerX   = groupX + (groupW - barW * 2 - gap) / 2;
-        const incomeX   = centerX;
-        const expenseX  = centerX + barW + gap;
-        const showLabel = !hideTextLabels && i % showEvery === 0;
+    <Animated.View style={drawStyle}>
+      <Svg width={width} height={height}>
+        {guideLines.map((gl, idx) => (
+          <React.Fragment key={idx}>
+            <Line
+              x1={padL} y1={gl.y}
+              x2={width - padR} y2={gl.y}
+              stroke={subTextColor} strokeWidth={0.4} opacity={0.2}
+              strokeDasharray="4,4"
+            />
+          </React.Fragment>
+        ))}
+        <Path d={incomeAreaPath}  fill={theme.income}  opacity={0.08} />
+        <Path d={expenseAreaPath} fill={theme.expense} opacity={0.08} />
+        {bars.map((bar, i) => {
+          const groupX    = padL + i * groupW;
+          const incomeH   = Math.max(2, (bar.income / maxVal) * chartH);
+          const expenseH  = Math.max(2, (bar.expense / maxVal) * chartH);
+          const centerX   = groupX + (groupW - barW * 2 - gap) / 2;
+          const incomeX   = centerX;
+          const expenseX  = centerX + barW + gap;
+          const showLabel = !hideTextLabels && i % showEvery === 0;
 
-        return (
-          <React.Fragment key={i}>
-            <Rect x={incomeX} y={padT + chartH - incomeH} width={barW} height={incomeH}
-              rx={Math.min(barW / 2, 3)} fill={theme.income} opacity={0.65} />
-            <Rect x={expenseX} y={padT + chartH - expenseH} width={barW} height={expenseH}
-              rx={Math.min(barW / 2, 3)} fill={theme.expense} opacity={0.65} />
-            {showLabel && (
+          return (
+            <React.Fragment key={i}>
+              <Rect x={incomeX} y={padT + chartH - incomeH} width={barW} height={incomeH}
+                rx={Math.min(barW / 2, 3)} fill={theme.income} opacity={0.65} />
+              <Rect x={expenseX} y={padT + chartH - expenseH} width={barW} height={expenseH}
+                rx={Math.min(barW / 2, 3)} fill={theme.expense} opacity={0.65} />
+              {showLabel && (
+                <SvgText
+                  x={groupX + groupW / 2}
+                  y={labelY}
+                  fontSize={dailyMode ? 8 : 9}
+                  fill={subTextColor}
+                  textAnchor="middle"
+                >
+                  {bar.label}
+                </SvgText>
+              )}
+            </React.Fragment>
+          );
+        })}
+        {showYearBands && yearBands.map((band) => {
+          const x1 = padL + band.startIdx * groupW;
+          const x2 = padL + (band.endIdx + 1) * groupW;
+          const cx = (x1 + x2) / 2;
+          return (
+            <React.Fragment key={`y-${band.year}-${band.startIdx}`}>
+              <Rect
+                x={x1 + 1}
+                y={yearBandY}
+                width={Math.max(0, x2 - x1 - 2)}
+                height={yearBandH}
+                fill={theme.accent}
+                opacity={0.28}
+                rx={3}
+              />
+              <Line
+                x1={x1 + 1}
+                y1={yearBandY}
+                x2={x2 - 1}
+                y2={yearBandY}
+                stroke={theme.accent}
+                strokeWidth={2}
+              />
               <SvgText
-                x={groupX + groupW / 2}
-                y={labelY}
-                fontSize={dailyMode ? 8 : 9}
-                fill={subTextColor}
+                x={cx}
+                y={yearBandY + yearBandH - 3}
+                fontSize={yearMode ? 9 : 11}
+                fill={theme.accent}
                 textAnchor="middle"
               >
-                {bar.label}
+                {band.label != null ? String(band.label) : String(band.year)}
               </SvgText>
-            )}
+            </React.Fragment>
+          );
+        })}
+        <Path d={incomePath}  fill="none" stroke={theme.income}  strokeWidth={2} opacity={0.9} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={expensePath} fill="none" stroke={theme.expense} strokeWidth={2} opacity={0.9} strokeLinecap="round" strokeLinejoin="round" />
+        {incomePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
+          <Line key={`id${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.income} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
+        ))}
+        {expensePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
+          <Line key={`ed${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.expense} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
+        ))}
+        {hasPeriodFooter && (
+          <React.Fragment>
+            <Rect x={padL + 1} y={yearBandY} width={chartW - 2} height={yearBandH}
+              fill={theme.accent} opacity={0.28} rx={3} />
+            <Line x1={padL + 1} y1={yearBandY} x2={width - padR - 1} y2={yearBandY}
+              stroke={theme.accent} strokeWidth={2} />
+            <SvgText x={width / 2} y={yearBandY + yearBandH - 3} fontSize={10}
+              fill={theme.accent} textAnchor="middle">{periodFooter}</SvgText>
           </React.Fragment>
-        );
-      })}
-      {showYearBands && yearBands.map((band) => {
-        const x1 = padL + band.startIdx * groupW;
-        const x2 = padL + (band.endIdx + 1) * groupW;
-        const cx = (x1 + x2) / 2;
-        return (
-          <React.Fragment key={`y-${band.year}-${band.startIdx}`}>
-            <Rect
-              x={x1 + 1}
-              y={yearBandY}
-              width={Math.max(0, x2 - x1 - 2)}
-              height={yearBandH}
-              fill={theme.accent}
-              opacity={0.28}
-              rx={3}
-            />
-            <Line
-              x1={x1 + 1}
-              y1={yearBandY}
-              x2={x2 - 1}
-              y2={yearBandY}
-              stroke={theme.accent}
-              strokeWidth={2}
-            />
-            <SvgText
-              x={cx}
-              y={yearBandY + yearBandH - 3}
-              fontSize={yearMode ? 9 : 11}
-              fill={theme.accent}
-              textAnchor="middle"
-            >
-              {band.label ?? band.year}
-            </SvgText>
-          </React.Fragment>
-        );
-      })}
-      <Path d={incomePath}  fill="none" stroke={theme.income}  strokeWidth={2} opacity={0.9} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d={expensePath} fill="none" stroke={theme.expense} strokeWidth={2} opacity={0.9} strokeLinecap="round" strokeLinejoin="round" />
-      {incomePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
-        <Line key={`id${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.income} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
-      ))}
-      {expensePts.filter((_, i) => i % showEvery === 0).map((pt, i) => (
-        <Line key={`ed${i}`} x1={pt.x} y1={pt.y} x2={pt.x} y2={pt.y} stroke={theme.expense} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
-      ))}
-      {hasPeriodFooter && (
-        <React.Fragment>
-          <Rect x={padL + 1} y={yearBandY} width={chartW - 2} height={yearBandH}
-            fill={theme.accent} opacity={0.28} rx={3} />
-          <Line x1={padL + 1} y1={yearBandY} x2={width - padR - 1} y2={yearBandY}
-            stroke={theme.accent} strokeWidth={2} />
-          <SvgText x={width / 2} y={yearBandY + yearBandH - 3} fontSize={10}
-            fill={theme.accent} textAnchor="middle">{periodFooter}</SvgText>
-        </React.Fragment>
-      )}
-      <Line x1={padL} y1={baseline} x2={width - padR} y2={baseline}
-        stroke={subTextColor} strokeWidth={0.6} opacity={0.4} />
-    </Svg>
+        )}
+        <Line x1={padL} y1={baseline} x2={width - padR} y2={baseline}
+          stroke={subTextColor} strokeWidth={0.6} opacity={0.4} />
+      </Svg>
+    </Animated.View>
   );
 }
 

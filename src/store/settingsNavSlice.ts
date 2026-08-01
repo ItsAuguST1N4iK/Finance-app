@@ -14,8 +14,12 @@ interface SettingsNavState {
   expandSeq: number;
   /** Crumb ids that should be forced open before scrolling. */
   expandIds: string[];
+  /** Only one leaf panel open at a time under a section (accordion). */
+  exclusivePanelId: string | null;
 
   setCrumbs: (crumbs: BreadcrumbCrumb[]) => void;
+  /** Replace crumbs and mark this leaf as the exclusive open panel. */
+  setPathExclusive: (crumbs: BreadcrumbCrumb[], leafId: string | null) => void;
   registerTarget: (id: string, y: number) => void;
   /** Navigate via breadcrumb: pop trail after id, expand ancestors, scroll. */
   navigateToCrumb: (id: string) => void;
@@ -30,8 +34,15 @@ export const useSettingsNavStore = create<SettingsNavState>((set, get) => ({
   pendingScrollId: null,
   expandSeq: 0,
   expandIds: [],
+  exclusivePanelId: null,
 
   setCrumbs: (crumbs) => set({ crumbs }),
+
+  setPathExclusive: (crumbs, leafId) => set((s) => ({
+    crumbs,
+    exclusivePanelId: leafId,
+    expandSeq: s.expandSeq + 1,
+  })),
 
   registerTarget: (id, y) => set((s) => ({ targets: { ...s.targets, [id]: y } })),
 
@@ -47,6 +58,7 @@ export const useSettingsNavStore = create<SettingsNavState>((set, get) => ({
         crumbs: root.length ? root : crumbs.slice(0, 1),
         pendingScrollId: 'settings',
         expandIds: [],
+        exclusivePanelId: null,
         expandSeq: get().expandSeq + 1,
       });
       return;
@@ -61,10 +73,12 @@ export const useSettingsNavStore = create<SettingsNavState>((set, get) => ({
     const expandIds = nextCrumbs
       .map((c) => c.id)
       .filter((cid) => cid !== 'settings');
+    const leaf = nextCrumbs[nextCrumbs.length - 1]?.id ?? null;
     set({
       crumbs: nextCrumbs,
       pendingScrollId: id,
       expandIds,
+      exclusivePanelId: leaf === 'settings' || leaf === 'cards-categories' ? null : leaf,
       expandSeq: get().expandSeq + 1,
     });
   },
@@ -77,6 +91,7 @@ export const useSettingsNavStore = create<SettingsNavState>((set, get) => ({
     crumbs: [],
     pendingScrollId: null,
     expandIds: [],
+    exclusivePanelId: null,
     targets: {},
   }),
 }));

@@ -21,6 +21,7 @@ import {
   loadHomeCurrency,
 } from '../../utils/settingsPrefs';
 import { makeStyles } from './settingsStyles';
+import { layout } from '../../theme/tokens';
 import { AppearanceSection } from './AppearanceSection';
 import { PreferencesSection } from './PreferencesSection';
 import { PlatformsSection } from './PlatformsSection';
@@ -103,13 +104,12 @@ export function SettingsScreen() {
     }, [clearNav, setCrumbs, t.tabSettings]),
   );
 
-  // After forced expands settle, remasure and scroll with viewport offset (~38%)
+  // After forced expands settle, remasure once and scroll with modest top offset (no double-pass overshoot)
   useEffect(() => {
     if (!pendingScrollId) return;
 
     let cancelled = false;
-    const desiredWindowY = winH * 0.38;
-    let passTimer: ReturnType<typeof setTimeout> | undefined;
+    const TOP_PAD = 28;
 
     const tryScroll = (attempt: number) => {
       if (cancelled) return;
@@ -120,43 +120,31 @@ export function SettingsScreen() {
         return;
       }
 
-      const ty = useSettingsNavStore.getState().targets[pendingScrollId];
-      if (ty == null) {
-        if (attempt < 8) {
-          setTimeout(() => tryScroll(attempt + 1), 80);
-        } else {
-          clearPendingScroll();
-        }
-        return;
-      }
-
-      const nextY = Math.max(0, scrollYRef.current + (ty - desiredWindowY));
-      scrollRef.current?.scrollTo({ y: nextY, animated: true });
-
-      // Second pass after nested panels finish opening
-      if (attempt === 0) {
-        passTimer = setTimeout(() => {
-          if (cancelled) return;
-          const ty2 = useSettingsNavStore.getState().targets[pendingScrollId];
-          if (ty2 == null) {
+      scrollViewWrapRef.current?.measureInWindow((_wx, wrapY) => {
+        if (cancelled) return;
+        const ty = useSettingsNavStore.getState().targets[pendingScrollId];
+        if (ty == null) {
+          if (attempt < 10) {
+            setTimeout(() => tryScroll(attempt + 1), 70);
+          } else {
             clearPendingScroll();
-            return;
           }
-          const nextY2 = Math.max(0, scrollYRef.current + (ty2 - desiredWindowY));
-          scrollRef.current?.scrollTo({ y: nextY2, animated: true });
-          clearPendingScroll();
-        }, 260);
-      } else {
+          return;
+        }
+        // Content-relative Y is stable regardless of current scroll offset
+        const relativeY = ty - wrapY;
+        const nextY = Math.max(0, relativeY - TOP_PAD);
+        scrollRef.current?.scrollTo({ y: nextY, animated: true });
         clearPendingScroll();
-      }
+      });
     };
 
-    const kickoff = setTimeout(() => tryScroll(0), 380);
+    const kickoff = setTimeout(() => tryScroll(0), 400);
     void expandSeq;
+    void winH;
     return () => {
       cancelled = true;
       clearTimeout(kickoff);
-      if (passTimer) clearTimeout(passTimer);
     };
   }, [pendingScrollId, expandSeq, clearPendingScroll, winH]);
 
@@ -171,7 +159,7 @@ export function SettingsScreen() {
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: layout.tabBarClearance + 8 }}
         onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={16}
       >
@@ -231,22 +219,21 @@ export function SettingsScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
 
-      {editAccount && (
-        <CardEditModal
-          account={editAccount}
-          visible={!!editAccount}
-          showCurrency
-          onClose={() => setEditAccount(null)}
-          onSave={(name, color, currency) => {
-            updateAccount(editAccount.id, {
-              displayName: name,
-              color,
-              ...(currency ? { currency } : {}),
-            });
-            setEditAccount(null);
-          }}
-        />
-      )}
+      <CardEditModal
+        account={editAccount}
+        visible={!!editAccount}
+        showCurrency
+        onClose={() => setEditAccount(null)}
+        onSave={(name, color, currency) => {
+          if (!editAccount) return;
+          updateAccount(editAccount.id, {
+            displayName: name,
+            color,
+            ...(currency ? { currency } : {}),
+          });
+          setEditAccount(null);
+        }}
+      />
       <AddAccountModal
         visible={showAddAccount}
         onClose={() => setShowAddAccount(false)}

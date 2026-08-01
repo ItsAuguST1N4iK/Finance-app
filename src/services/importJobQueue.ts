@@ -5,6 +5,8 @@ import { setImportCategoryRulesCache } from '../utils/categoryDetect';
 import { retagAllTransactions } from '../utils/retagTransactions';
 import { refreshAppData } from './refreshAppData';
 import type { Account } from '../types';
+import { getLanguage } from '../db/repos/settings';
+import { TRANSLATIONS } from '../i18n';
 
 export type ImportJobKind = 'scraper' | 'retag';
 
@@ -37,6 +39,11 @@ const state: QueueState = {
 
 let pumping = false;
 
+function retagProgressLabel(): string {
+  const lang = getLanguage();
+  return TRANSLATIONS[lang === 'en' ? 'en' : 'uk'].appProgressRetag;
+}
+
 function publish(
   step: string,
   current: number,
@@ -60,13 +67,14 @@ function prepareRulesCache(): CategoryRule[] {
 }
 
 async function runRetagJob(accounts: Account[]): Promise<void> {
+  const label = retagProgressLabel();
   prepareRulesCache();
-  publish('Автотегування…', 0, 1, 'rules');
-  // Yield so the header can paint before the sync DB walk
+  publish(label, 0, 1, 'rules');
   await new Promise<void>((r) => setTimeout(r, 32));
-  publish('Автотегування…', 0, 1, 'retag');
-  retagAllTransactions(accounts);
-  publish('Автотегування…', 1, 1, 'done');
+  await retagAllTransactions(accounts, (current, total, detail) => {
+    publish(label, current, total, detail);
+  });
+  publish(label, 1, 1, 'done');
   await refreshAppData('all');
 }
 
@@ -98,9 +106,10 @@ async function pump(): Promise<void> {
       if (state.retagAfterBatch) {
         state.retagAfterBatch = false;
         const accounts = state.retagAccounts;
+        const label = retagProgressLabel();
         state.active = {
           id: `retag_${Date.now()}`,
-          label: 'Автотегування…',
+          label,
           kind: 'retag',
           run: async () => {},
         };

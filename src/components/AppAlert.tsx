@@ -1,6 +1,8 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { FadeModal } from './FadeModal';
+import { PressableScale } from './PressableScale';
 
 export interface AlertButton {
   text:    string;
@@ -20,56 +22,46 @@ export function AppAlert({ visible, title, message, buttons, onDismiss }: Props)
   const { theme } = useTheme();
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onDismiss}
-      statusBarTranslucent
-    >
-      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+    <FadeModal visible={visible} onClose={() => onDismiss?.()}>
+      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
 
-          {message && (
-            <Text style={[styles.message, { color: theme.subtext }]}>{message}</Text>
-          )}
+      {message && (
+        <Text style={[styles.message, { color: theme.subtext }]}>{message}</Text>
+      )}
 
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+      <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-          <View style={styles.btnRow}>
-            {buttons.map((btn, i) => {
-              const color =
-                btn.style === 'destructive' ? theme.expense :
-                btn.style === 'cancel'      ? theme.subtext :
-                theme.accent;
+      <View style={styles.btnRow}>
+        {buttons.map((btn, i) => {
+          const color =
+            btn.style === 'destructive' ? theme.expense :
+            btn.style === 'cancel'      ? theme.subtext :
+            theme.accent;
 
-              return (
-                <React.Fragment key={i}>
-                  {i > 0 && <View style={[styles.btnDivider, { backgroundColor: theme.border }]} />}
-                  <TouchableOpacity
-                    style={styles.btn}
-                    onPress={() => {
-                      onDismiss?.();
-                      btn.onPress?.();
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.btnText,
-                      { color },
-                      btn.style === 'cancel' && { fontWeight: '400' },
-                    ]}>
-                      {btn.text}
-                    </Text>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
-            })}
-          </View>
-        </View>
+          return (
+            <React.Fragment key={i}>
+              {i > 0 && <View style={[styles.btnDivider, { backgroundColor: theme.border }]} />}
+              <PressableScale
+                style={styles.btn}
+                scaleTo={0.96}
+                onPress={() => {
+                  onDismiss?.();
+                  btn.onPress?.();
+                }}
+              >
+                <Text style={[
+                  styles.btnText,
+                  { color },
+                  btn.style === 'cancel' && { fontWeight: '400' },
+                ]}>
+                  {btn.text}
+                </Text>
+              </PressableScale>
+            </React.Fragment>
+          );
+        })}
       </View>
-    </Modal>
+    </FadeModal>
   );
 }
 
@@ -105,24 +97,12 @@ export function useAppAlert() {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  card: {
-    width: '100%',
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
   title: {
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
-    paddingTop: 20,
-    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingHorizontal: 4,
   },
   message: {
     fontSize: 14,
@@ -130,11 +110,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingTop: 8,
     paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 4,
   },
-  divider: { height: 1 },
+  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: -4 },
   btnRow:  { flexDirection: 'row' },
-  btnDivider: { width: 1 },
+  btnDivider: { width: StyleSheet.hairlineWidth },
   btn: {
     flex: 1,
     alignItems: 'center',

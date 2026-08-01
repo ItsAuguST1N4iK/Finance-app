@@ -16,8 +16,9 @@ export const radius = {
   xs: 6,
   sm: 8,
   md: 12,
+  /** Cards, sections, sheets, dialogs — one radius family */
   lg: 16,
-  sheet: 24,
+  sheet: 16,
   pill: 20,
   fab: 28,
 } as const;
@@ -39,10 +40,25 @@ export const type = {
   kpi: { fontSize: 20, fontWeight: '800' as const, letterSpacing: -0.5 },
 } as const;
 
+/** Keep in sync with IslandTabBar.TAB_ISLAND_HEIGHT + TAB_BAR_GAP */
+const TAB_ISLAND_HEIGHT_TOKEN = 58 + 8;
+
 export const layout = {
   screenPad: space[4],
   sectionGap: space[4],
-  listBottom: 100,
+  /** Island height + gap above home indicator (add insets.bottom at call sites when needed) */
+  tabBarClearance: TAB_ISLAND_HEIGHT_TOKEN,
+  /** Scroll content padding so last items clear the floating tab island */
+  listBottom: TAB_ISLAND_HEIGHT_TOKEN + 42,
   sheetPad: space[5],
   chipGap: space[2],
+  /** Right inset so scroll indicators don't cover text */
+  scrollGutter: 14,
 } as const;
+
+/** Contour stroke — one width for cards, chips, sheets, tab bar. */
+export const stroke = {
+  width: 1.25,
+  hairline: 1,
+} as const;
+

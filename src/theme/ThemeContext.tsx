@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  createContext, useContext, useState, useEffect, useCallback, useMemo,
+} from 'react';
 import { THEMES, ThemeKey, AppTheme, DEFAULT_ACCENT, THEME_LABELS } from './index';
 import { glassStyle } from '../utils/glassStyle';
 import {
@@ -11,32 +13,42 @@ import {
 
 export { THEME_LABELS };
 
-interface ThemeContextValue {
+/** Colors only — list rows / static chrome should prefer this to avoid slider fan-out. */
+interface ThemeVisualValue {
   themeKey: ThemeKey;
   accent: string;
   theme: AppTheme;
-  /** 0 = opaque, 100 = most transparent */
-  transparencyPct: number;
-  animationSpeed: number;
   setThemeKey: (key: ThemeKey) => void;
   setAccent: (color: string) => void;
+}
+
+interface ThemeFxValue {
+  transparencyPct: number;
+  animationSpeed: number;
   setTransparencyPct: (v: number) => void;
   setAnimationSpeed: (v: number) => void;
   dur: (ms: number) => number;
-  cardSurface: (alt?: boolean) => { backgroundColor: string; borderColor: string; borderWidth: number };
+  calmDur: (ms: number) => number;
+  cardSurface: (alt?: boolean) => { backgroundColor: string; borderColor?: string; borderWidth?: number };
 }
 
-const ThemeContext = createContext<ThemeContextValue>({
+type ThemeContextValue = ThemeVisualValue & ThemeFxValue;
+
+const ThemeVisualContext = createContext<ThemeVisualValue>({
   themeKey: 'dark',
   accent: DEFAULT_ACCENT,
   theme: { ...THEMES.dark, accent: DEFAULT_ACCENT },
-  transparencyPct: 28,
-  animationSpeed: 1,
   setThemeKey: () => {},
   setAccent: () => {},
+});
+
+const ThemeFxContext = createContext<ThemeFxValue>({
+  transparencyPct: 28,
+  animationSpeed: 1,
   setTransparencyPct: () => {},
   setAnimationSpeed: () => {},
   dur: (ms) => ms,
+  calmDur: (ms) => ms,
   cardSurface: () => ({ backgroundColor: THEMES.dark.card, borderColor: 'transparent', borderWidth: 0 }),
 });
 
@@ -86,7 +98,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
   }, []);
 
-  const dur = useCallback((ms: number) => Math.round(ms / animationSpeed), [animationSpeed]);
+  const dur = useCallback(
+    (ms: number) => Math.max(140, Math.round(ms / animationSpeed)),
+    [animationSpeed],
+  );
+
+  const calmDur = useCallback(
+    (ms: number) => Math.max(180, Math.round(ms / Math.min(animationSpeed, 1.25))),
+    [animationSpeed],
+  );
 
   const theme: AppTheme = useMemo(
     () => ({ ...THEMES[themeKey], accent }),
@@ -98,24 +118,42 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return glassStyle(base, transparencyPct, theme.glassBorder);
   }, [theme.card, theme.cardAlt, theme.glassBorder, transparencyPct]);
 
-  const value = useMemo(() => ({
-    themeKey, accent, theme,
+  const visual = useMemo(() => ({
+    themeKey, accent, theme, setThemeKey, setAccent,
+  }), [themeKey, accent, theme, setThemeKey, setAccent]);
+
+  const fx = useMemo(() => ({
     transparencyPct, animationSpeed,
-    setThemeKey, setAccent, setTransparencyPct, setAnimationSpeed,
-    dur, cardSurface,
+    setTransparencyPct, setAnimationSpeed,
+    dur, calmDur, cardSurface,
   }), [
-    themeKey, accent, theme, transparencyPct, animationSpeed,
-    setThemeKey, setAccent, setTransparencyPct, setAnimationSpeed,
-    dur, cardSurface,
+    transparencyPct, animationSpeed,
+    setTransparencyPct, setAnimationSpeed,
+    dur, calmDur, cardSurface,
   ]);
 
   return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeVisualContext.Provider value={visual}>
+      <ThemeFxContext.Provider value={fx}>
+        {children}
+      </ThemeFxContext.Provider>
+    </ThemeVisualContext.Provider>
   );
 }
 
+/** Full theme API (re-renders on visual OR fx changes). */
 export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
+  const visual = useContext(ThemeVisualContext);
+  const fx = useContext(ThemeFxContext);
+  return useMemo(() => ({ ...visual, ...fx }), [visual, fx]);
+}
+
+/** Colors only — safe for list rows / static UI. */
+export function useThemeVisual(): ThemeVisualValue {
+  return useContext(ThemeVisualContext);
+}
+
+/** Motion / glass prefs only. */
+export function useThemeFx(): ThemeFxValue {
+  return useContext(ThemeFxContext);
 }

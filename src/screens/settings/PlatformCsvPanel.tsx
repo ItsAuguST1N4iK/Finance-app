@@ -1,8 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Animated, LayoutAnimation } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { PressableScale } from '../../components/PressableScale';
+import { Collapsible } from '../../components/Collapsible';
+import { ChevronToggle } from '../../components/MotionIcons';
 import { useSettingsNavStore } from '../../store/settingsNavSlice';
+import { stroke } from '../../theme/tokens';
 
 export function PlatformCsvPanel({
   title,
@@ -19,13 +22,13 @@ export function PlatformCsvPanel({
   parentCrumbId?: string;
   onExpandChange?: (expanded: boolean) => void;
 }) {
-  const { theme, dur, cardSurface } = useTheme();
+  const { theme, cardSurface } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const bodyOpacity = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
   const surface = cardSurface(true);
   const registerTarget = useSettingsNavStore((s) => s.registerTarget);
   const expandSeq = useSettingsNavStore((s) => s.expandSeq);
   const expandIds = useSettingsNavStore((s) => s.expandIds);
+  const exclusivePanelId = useSettingsNavStore((s) => s.exclusivePanelId);
   const wrapRef = useRef<View>(null);
 
   const measure = useCallback(() => {
@@ -40,16 +43,10 @@ export function PlatformCsvPanel({
       if (next) measure();
       return;
     }
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Animated.timing(bodyOpacity, {
-      toValue: next ? 1 : 0,
-      duration: dur(220),
-      useNativeDriver: true,
-    }).start();
     setExpanded(next);
     if (notify) onExpandChange?.(next);
-    if (next) setTimeout(measure, 280);
-  }, [expanded, bodyOpacity, dur, onExpandChange, measure]);
+    if (next) setTimeout(measure, 80 + 20);
+  }, [expanded, onExpandChange, measure]);
 
   useEffect(() => {
     if (!crumbId || expandIds.length === 0) return;
@@ -59,30 +56,65 @@ export function PlatformCsvPanel({
     }
   }, [expandSeq, expandIds, crumbId, expanded, expandTo, measure]);
 
-  function toggle() {
-    expandTo(!expanded, true);
-  }
+  useEffect(() => {
+    if (!crumbId || !exclusivePanelId) return;
+    if (exclusivePanelId !== crumbId && expanded) {
+      expandTo(false, false);
+    }
+  }, [exclusivePanelId, crumbId, expanded, expandTo]);
 
   return (
     <View
       ref={wrapRef}
       collapsable={false}
       onLayout={measure}
-      style={[{ borderWidth: 1, borderColor: theme.border, borderRadius: 12, marginBottom: 10, overflow: 'hidden' }, surface]}
+      style={[styles.wrap, surface, { borderColor: theme.border }]}
     >
-      <TouchableOpacity
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }}
-        onPress={toggle}
-        activeOpacity={0.75}
+      <PressableScale
+        style={styles.header}
+        contentStyle={styles.headerInner}
+        onPress={() => expandTo(!expanded, true)}
+        scaleTo={0.985}
       >
-        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{title}</Text>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={theme.subtext} />
-      </TouchableOpacity>
-      {expanded && (
-        <Animated.View style={{ borderTopWidth: 1, borderTopColor: theme.border, padding: 12, opacity: bodyOpacity }}>
-          {children}
-        </Animated.View>
-      )}
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
+        <ChevronToggle expanded={expanded} size={16} color={theme.accent} />
+      </PressableScale>
+      <Collapsible
+        expanded={expanded}
+        contentStyle={[styles.body, { borderTopColor: theme.border }]}
+      >
+        {children}
+      </Collapsible>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: {
+    borderWidth: stroke.width,
+    borderRadius: 12,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  header: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  headerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  title: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  body: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+});

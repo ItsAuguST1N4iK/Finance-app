@@ -43,15 +43,16 @@ function fingerprintFromRow(row: {
 }
 
 /**
- * Compare import rows only to what is already in SQLite.
- * Does NOT dedupe within the statement itself — multiple similar rows in one file stay unique.
- *
- * Soft ±5 min / loose fingerprints are NOT used here — they previously hid legitimate
- * near-identical rows (e.g. two +0.01 From: … a few minutes apart).
- * Hard matches only: same id, external_id, or exact account fingerprint.
+ * Import-only duplicate check: compare incoming rows to existing SQLite rows.
+ * Does NOT delete or rewrite existing transactions — only classifies the import batch.
+ * Soft ±5 min matching is intentionally not used.
  */
 export function analyzeImportDuplicates(txs: UnifiedTransaction[]): ImportDuplicateAnalysis {
+  if (txs.length === 0) return { duplicates: [], unique: [] };
+
   const db = getDatabase();
+  const accountIds = [...new Set(txs.map((t) => t.accountId))];
+  const placeholders = accountIds.map(() => '?').join(',');
   const existingRows = db.getAllSync<{
     id: string;
     account_id: string;
@@ -63,8 +64,37 @@ export function analyzeImportDuplicates(txs: UnifiedTransaction[]): ImportDuplic
     description: string | null;
   }>(
     `SELECT id, account_id, platform, external_id, transaction_date, amount, currency, description
-     FROM transactions`,
+     FROM transactions
+     WHERE account_id IN (${placeholders})`,
+    accountIds,
   );
+
+  // Also resolve by exact id / external_id for rows that may live on another account
+  const incomingIds = txs.map((t) => t.id);
+  const incomingExt = txs
+    .filter((t) => t.externalId)
+    .map((t) => ({ platform: t.platform, externalId: t.externalId! }));
+
+  if (incomingIds.length > 0) {
+    const idPh = incomingIds.map(() => '?').join(',');
+    const byId = db.getAllSync<typeof existingRows[number]>(
+      `SELECT id, account_id, platform, external_id, transaction_date, amount, currency, description
+       FROM transactions WHERE id IN (${idPh})`,
+      incomingIds,
+    );
+    for (const row of byId) {
+      if (!existingRows.some((r) => r.id === row.id)) existingRows.push(row);
+    }
+  }
+
+  for (const { platform, externalId } of incomingExt) {
+    const row = db.getFirstSync<typeof existingRows[number]>(
+      `SELECT id, account_id, platform, external_id, transaction_date, amount, currency, description
+       FROM transactions WHERE platform = ? AND external_id = ? LIMIT 1`,
+      [platform, externalId],
+    );
+    if (row && !existingRows.some((r) => r.id === row.id)) existingRows.push(row);
+  }
 
   const existingIds = new Set(existingRows.map((r) => r.id));
   const existingExternal = new Set(

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
+import { PressableScale } from '../../components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import { tokenStore } from '../../security/tokenStore';
 import { useTheme } from '../../theme/ThemeContext';
@@ -78,12 +79,12 @@ export function TokenBlock({
           </View>
         )}
       </View>
-      <TouchableOpacity style={s.instrToggle} onPress={() => setShowInstr((v) => !v)} activeOpacity={0.75}>
+      <PressableScale style={s.instrToggle} onPress={() => setShowInstr((v) => !v)}>
         <Ionicons name={showInstr ? 'chevron-up' : 'information-circle-outline'} size={14} color={theme.accent} />
         <Text style={[s.instrToggleText, { color: theme.accent }]}>
           {showInstr ? t.cancel : t.settingsHowToGet}
         </Text>
-      </TouchableOpacity>
+      </PressableScale>
       {showInstr && (
         <View style={[s.instrBox, { backgroundColor: theme.bg, borderColor: theme.border }]}>
           <Text style={[s.instrText, { color: theme.subtext }]}>{instructions}</Text>
@@ -102,46 +103,44 @@ export function TokenBlock({
               autoCapitalize="none"
               autoCorrect={false}
             />
-            <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPwd(!showPwd)} activeOpacity={0.75}>
+            <PressableScale style={s.eyeBtn} onPress={() => setShowPwd(!showPwd)}>
               <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.subtext} />
-            </TouchableOpacity>
+            </PressableScale>
           </View>
-          <TouchableOpacity
+          <PressableScale
             style={[s.saveBtn, !value.trim() && { opacity: 0.5 }]}
             onPress={handleSave}
             disabled={!value.trim()}
-            activeOpacity={0.75}
           >
             <Text style={s.saveBtnText}>{t.save}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </>
       )}
       {saved && (
         <>
-          <TouchableOpacity
+          <PressableScale
             style={[s.viewTokenBtn, { borderColor: theme.border, backgroundColor: theme.cardAlt }]}
             onPress={() => setShowStored((v) => !v)}
-            activeOpacity={0.75}
           >
             <Ionicons name={showStored ? 'eye-off-outline' : 'key-outline'} size={16} color={theme.accent} />
             <Text style={[s.viewTokenText, { color: theme.accent }]}>
               {showStored ? t.tokenHide : t.tokenView}
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
           {showStored && stored && (
             <View style={[s.storedTokenBox, { backgroundColor: theme.bg, borderColor: theme.border }]}>
               <Text style={[s.storedTokenValue, { color: theme.text }]} selectable>
                 {showPwd ? stored : maskToken(stored)}
               </Text>
-              <TouchableOpacity onPress={() => setShowPwd((v) => !v)} activeOpacity={0.75} style={s.eyeBtn}>
+              <PressableScale onPress={() => setShowPwd((v) => !v)} style={s.eyeBtn}>
                 <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color={theme.subtext} />
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           )}
-          <TouchableOpacity style={s.deleteBtn} onPress={handleDelete} activeOpacity={0.75}>
+          <PressableScale style={s.deleteBtn} onPress={handleDelete}>
             <Ionicons name="trash-outline" size={14} color={theme.expense} />
             <Text style={[s.deleteBtnText, { color: theme.expense }]}>{t.disconnect}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </>
       )}
     </View>

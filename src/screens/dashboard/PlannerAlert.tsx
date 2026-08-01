@@ -6,6 +6,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import type { PlannedIncome } from '../../types';
 import { currencySymbol } from '../../utils/currency';
 import { numberLocale } from '../../utils/locale';
+import { radius, space, stroke } from '../../theme/tokens';
 
 // ─── Planner Alert ────────────────────────────────────
 
@@ -44,7 +45,7 @@ export function PlannerAlert({ item }: { item: PlannedIncome }) {
 const styles = StyleSheet.create({
   plannerAlert: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1,
+    borderRadius: radius.md, padding: space[3], marginBottom: space[2], borderWidth: stroke.width,
   },
   plannerName: { fontSize: 14, fontWeight: '500' },
   plannerSub:  { fontSize: 12, marginTop: 2 },

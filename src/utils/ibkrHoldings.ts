@@ -1,5 +1,5 @@
 import type { CurrencyRate } from '../types';
-import { convertToHomeCurrency } from './currencyConvert';
+import { tryConvertToHomeCurrency } from './currencyConvert';
 
 /** Parsed IBKR trade line: `BUY 0.0309 VOO @ 679.19` / `SELL -0.7704 VOOG @ 82.25` */
 const TRADE_RE = /^(BUY|SELL)\s+(-?[\d.]+)\s+([A-Z][A-Z0-9.]{0,11})\s+@\s+([\d.]+)/i;
@@ -84,9 +84,10 @@ export function estimateIbkrPortfolio(
     if (tx.platform !== 'ibkr') continue;
     const parsed = parseIbkrTradeDescription(tx.description);
     if (!parsed) continue;
-    const amountHome = convertToHomeCurrency(
+    const amountHome = tryConvertToHomeCurrency(
       Math.abs(tx.amount), tx.currency, homeCurrency, rates,
     );
+    if (amountHome == null) continue;
     if (parsed.side === 'BUY') {
       buyCount += 1;
       buyCash += amountHome;
@@ -149,7 +150,8 @@ export function estimateIbkrPortfolio(
     const qty = Math.round(row.qty * 1e8) / 1e8;
     if (qty <= 1e-8) continue;
     const rawValue = qty * row.lastPrice;
-    const marketValue = convertToHomeCurrency(rawValue, row.currency, homeCurrency, rates);
+    const marketValue = tryConvertToHomeCurrency(rawValue, row.currency, homeCurrency, rates);
+    if (marketValue == null) continue;
     marketValueTotal += marketValue;
     holdings.push({
       symbol,

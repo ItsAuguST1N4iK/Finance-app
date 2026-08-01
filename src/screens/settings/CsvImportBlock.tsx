@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text } from 'react-native';
+import { PressableScale } from '../../components/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '../../theme/ThemeContext';
@@ -86,13 +87,12 @@ export function CsvImportBlock({
             <Text style={[s.hintText, { marginBottom: 10 }]}>{t.importCsvAutoCreateHint}</Text>
           ) : (
             <View style={[s.currenciesWrap, { marginBottom: 12 }]}>
-              <TouchableOpacity
+              <PressableScale
                 style={[s.currencyChip, {
                   backgroundColor: selectedAccountId === AUTO_ACCOUNT ? theme.accent + '22' : theme.cardAlt,
                   borderColor: selectedAccountId === AUTO_ACCOUNT ? theme.accent : theme.border,
                 }]}
                 onPress={() => setSelectedAccountId(AUTO_ACCOUNT)}
-                activeOpacity={0.75}
               >
                 <Text style={[s.currencyChipText, {
                   color: selectedAccountId === AUTO_ACCOUNT ? theme.accent : theme.subtext,
@@ -102,24 +102,23 @@ export function CsvImportBlock({
                 {selectedAccountId === AUTO_ACCOUNT && (
                   <Ionicons name="checkmark" size={12} color={theme.accent} />
                 )}
-              </TouchableOpacity>
+              </PressableScale>
               {eligibleAccounts.map((acc) => {
                 const active = selectedAccountId === acc.id;
                 return (
-                  <TouchableOpacity
+                  <PressableScale
                     key={acc.id}
                     style={[s.currencyChip, {
                       backgroundColor: active ? theme.accent + '22' : theme.cardAlt,
                       borderColor: active ? theme.accent : theme.border,
                     }]}
                     onPress={() => setSelectedAccountId(acc.id)}
-                    activeOpacity={0.75}
                   >
                     <Text style={[s.currencyChipText, { color: active ? theme.accent : theme.subtext }]}>
                       {acc.displayName ?? acc.name}
                     </Text>
                     {active && <Ionicons name="checkmark" size={12} color={theme.accent} />}
-                  </TouchableOpacity>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -144,48 +143,46 @@ export function CsvImportBlock({
             ]).map(({ mode, label }) => {
               const active = currencyMode === mode;
               return (
-                <TouchableOpacity
+                <PressableScale
                   key={mode}
                   style={[s.currencyChip, {
                     backgroundColor: active ? theme.accent + '22' : theme.cardAlt,
                     borderColor: active ? theme.accent : theme.border,
                   }]}
                   onPress={() => setCurrencyMode(mode)}
-                  activeOpacity={0.75}
                 >
                   <Text style={[s.currencyChipText, { color: active ? theme.accent : theme.subtext }]}>
                     {label}
                   </Text>
                   {active && <Ionicons name="checkmark" size={12} color={theme.accent} />}
-                </TouchableOpacity>
+                </PressableScale>
               );
             })}
           </View>
         </>
       )}
 
-      <TouchableOpacity style={s.instrToggle} onPress={() => setShowInstr((v) => !v)} activeOpacity={0.75}>
+      <PressableScale style={s.instrToggle} onPress={() => setShowInstr((v) => !v)}>
         <Ionicons name={showInstr ? 'chevron-up' : 'information-circle-outline'} size={14} color={theme.accent} />
         <Text style={[s.instrToggleText, { color: theme.accent }]}>
           {showInstr ? t.cancel : t.settingsHowToGet}
         </Text>
-      </TouchableOpacity>
+      </PressableScale>
       {showInstr && (
         <View style={[s.instrBox, { backgroundColor: theme.bg, borderColor: theme.border }]}>
           <Text style={[s.instrText, { color: theme.subtext }]}>{instructions}</Text>
         </View>
       )}
-      <TouchableOpacity
+      <PressableScale
         style={[s.saveBtn, loading && { opacity: 0.6 }]}
         onPress={handlePick}
         disabled={loading}
-        activeOpacity={0.75}
       >
         <Ionicons name="folder-open-outline" size={16} color={theme.onAccent} />
         <Text style={s.saveBtnText}>
           {loading ? t.importCsvLoading : t.importCsvBtn}
         </Text>
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 }

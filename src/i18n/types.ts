@@ -20,6 +20,7 @@ export interface Translations {
   dashUpcoming: string;
   dashRecentTx: string;
   dashNoTx: string;
+  dashNoTxHint: string;
   dashExchangeRates: string;
   dashBuy: string;
   dashSell: string;
@@ -31,6 +32,7 @@ export interface Translations {
 
   txSearch: string;
   txNoResults: string;
+  txNoResultsHint: string;
   txFilters: string;
   txPlatforms: string;
   txFilterAccounts: string;
@@ -46,6 +48,7 @@ export interface Translations {
   txTransaction: string;
   txExpandFilters: string;
   txCollapseFilters: string;
+  txClearAllFilters: string;
 
   analyticsThisMonth: string;
   analyticsLastMonth: string;
@@ -79,6 +82,7 @@ export interface Translations {
   analyticsIncomeAndExpense: string;
   analyticsTopCategories: string;
   analyticsNoData: string;
+  analyticsNoDataHint: string;
   analyticsDaily: string;
   analyticsMonthly: string;
   analyticsShowIncome: string;
@@ -86,12 +90,27 @@ export interface Translations {
   analyticsTx: string;
 
   settingsAppearance: string;
+  settingsTabBar: string;
+  settingsTabLabels: string;
+  settingsTabLabelsHint: string;
   settingsUserPreferences: string;
   settingsApiKeys: string;
   settingsCards: string;
   settingsTheme: string;
   settingsAccentColor: string;
   settingsLanguage: string;
+  settingsBiometric: string;
+  settingsBiometricLock: string;
+  settingsBiometricHint: string;
+  biometricTitle: string;
+  biometricSubtitle: string;
+  biometricPrompt: string;
+  biometricEnablePrompt: string;
+  biometricUnlock: string;
+  biometricFailed: string;
+  biometricFallback: string;
+  biometricUnavailableTitle: string;
+  biometricUnavailableBody: string;
   settingsHomeCurrency: string;
   settingsHomeCurrencyHint: string;
   settingsCurrencies: string;
@@ -174,6 +193,8 @@ export interface Translations {
   plannerExpense: string;
   plannerAddIncome: string;
   plannerAddExpense: string;
+  plannerEmptyTitle: string;
+  plannerEmptyHint: string;
   plannerPaid: string;
   plannerEditTitle: string;
   plannerAccount: string;
@@ -242,6 +263,9 @@ export interface Translations {
   settingsDeleteCategoryConfirm: string;
   settingsAutoRules: string;
   settingsAutoRulesHint: string;
+  settingsAutoCategories: string;
+  settingsAutoCategoriesHint: string;
+  settingsNoAutoCategories: string;
   settingsNoUserRules: string;
   settingsNoAutoRules: string;
   settingsSecondaryActionHint: string;
@@ -355,6 +379,10 @@ export interface Translations {
   settingsTransparencyHint: string;
   settingsTransparencyPreview: string;
   settingsTransparencyPreviewHint: string;
+  themeLabelDark: string;
+  themeLabelCursor: string;
+  themeLabelOled: string;
+  themeLabelLight: string;
 
   analyticsExcludeSelfTransfers: string;
   analyticsIncludeSelfTransfers: string;

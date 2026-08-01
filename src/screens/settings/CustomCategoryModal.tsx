@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { PressableScale } from '../../components/PressableScale';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { BottomSheetModal } from '../../components/BottomSheetModal';
@@ -9,6 +10,14 @@ import {
   type EditableCategory,
 } from '../../utils/categoryImpact';
 import { CARD_COLORS } from '../../constants/cardColors';
+import {
+  commonStyles,
+  fieldLabelStyle,
+  inputStyle,
+  selectChipStyle,
+  selectChipTextStyle,
+} from '../../theme/commonStyles';
+import { space } from '../../theme/tokens';
 
 const IMPACTS: CategoryImpact[] = ['expense', 'income', 'fee', 'neutral'];
 
@@ -70,82 +79,80 @@ export function CustomCategoryModal({
       onClose={onClose}
       title={category ? t.settingsEditCategory : t.settingsAddCategory}
       scroll
-      maxHeight="85%"
       footer={(
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-          <TouchableOpacity
-            style={{ flex: 1, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 13, alignItems: 'center' }}
+        <View style={commonStyles.sheetFooterRow}>
+          <PressableScale
+            style={[commonStyles.footerBtnGhost, { borderColor: theme.border }]}
             onPress={onClose}
           >
-            <Text style={{ color: theme.subtext, fontWeight: '600' }}>{t.cancel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{
-              flex: 2, borderRadius: 10, padding: 13, alignItems: 'center',
-              backgroundColor: theme.accent, opacity: canSave ? 1 : 0.5,
-            }}
+            <Text style={[commonStyles.footerBtnText, { color: theme.subtext }]}>{t.cancel}</Text>
+          </PressableScale>
+          <PressableScale
+            style={[
+              commonStyles.footerBtnPrimary,
+              { backgroundColor: theme.accent, opacity: canSave ? 1 : 0.5 },
+            ]}
             disabled={!canSave}
             onPress={handleSave}
           >
-            <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t.save}</Text>
-          </TouchableOpacity>
+            <Text style={[commonStyles.footerBtnTextPrimary, { color: theme.onAccent }]}>{t.save}</Text>
+          </PressableScale>
         </View>
       )}
     >
-      <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 6 }}>
-        {t.settingsCategoryName}
-      </Text>
+      <Text style={fieldLabelStyle(theme.subtext)}>{t.settingsCategoryName}</Text>
       <TextInput
-        style={{
-          borderRadius: 10, borderWidth: 1, padding: 12, fontSize: 15,
-          backgroundColor: theme.inputBg, borderColor: theme.border, color: theme.text, marginBottom: 14,
-        }}
+        style={[
+          inputStyle({
+            backgroundColor: theme.inputBg,
+            borderColor: theme.border,
+            color: theme.text,
+          }),
+          { marginBottom: space[3] + 2 },
+        ]}
         value={name}
         onChangeText={setName}
         placeholder={t.settingsCategoryName}
         placeholderTextColor={theme.subtext}
       />
 
-      <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 8 }}>
-        {t.settingsCategoryImpact}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+      <Text style={fieldLabelStyle(theme.subtext)}>{t.settingsCategoryImpact}</Text>
+      <View style={[commonStyles.chipRow, { marginBottom: space[3] + 2 }]}>
         {IMPACTS.map((imp) => {
           const active = impact === imp;
           return (
-            <TouchableOpacity
+            <PressableScale
               key={imp}
               onPress={() => setImpact(imp)}
-              style={{
-                paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1,
-                borderColor: active ? theme.accent : theme.border,
-                backgroundColor: active ? theme.accent + '22' : theme.cardAlt,
-              }}
+              style={selectChipStyle(theme, active)}
             >
-              <Text style={{ color: active ? theme.accent : theme.subtext, fontSize: 13, fontWeight: '600' }}>
+              <Text style={[selectChipTextStyle(theme, active), { fontSize: 13 }]}>
                 {impactLabel[imp]}
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
           );
         })}
       </View>
 
-      <Text style={{ fontSize: 12, fontWeight: '600', color: theme.subtext, marginBottom: 8 }}>
-        {t.settingsCategoryColor}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+      <Text style={fieldLabelStyle(theme.subtext)}>{t.settingsCategoryColor}</Text>
+      <View style={styles.colorsRow}>
         {CARD_COLORS.map((c) => (
-          <TouchableOpacity
+          <PressableScale
             key={c}
             onPress={() => setColor(c)}
-            style={{
-              width: 34, height: 34, borderRadius: 17, backgroundColor: c,
-              borderWidth: color === c ? 3 : 0,
-              borderColor: theme.onAccent,
-            }}
+            style={[
+              styles.colorDot,
+              { backgroundColor: c },
+              color === c && { borderWidth: 3, borderColor: theme.onAccent },
+            ]}
           />
         ))}
       </View>
     </BottomSheetModal>
   );
 }
+
+const styles = StyleSheet.create({
+  colorsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2.5], marginBottom: space[2] },
+  colorDot: { width: 34, height: 34, borderRadius: 17 },
+});

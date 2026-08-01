@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -7,6 +7,7 @@ import { resetAllFinancialData, resetAppSettings } from '../../utils/resetAppDat
 import { exportAndShareFullData } from '../../utils/exportFullData';
 import { refreshAppData } from '../../services/refreshAppData';
 import type { AlertShow } from '../../utils/importTransactions';
+import { PressableScale } from '../../components/PressableScale';
 import { Section } from './Section';
 import type { SettingsStyles } from './settingsStyles';
 
@@ -92,11 +93,11 @@ export function DangerSection({
             <Text style={[s.dangerTitle, { color: theme.text }]}>{t.settingsExport}</Text>
             <Text style={[s.dangerHint, { color: theme.subtext }]}>{t.settingsExportHint}</Text>
           </View>
-          <TouchableOpacity
+          <PressableScale
             style={[s.dangerBtn, { backgroundColor: theme.accent + '22', borderColor: theme.accent + '55' }, exporting && { opacity: 0.6 }]}
             onPress={handleExport}
             disabled={exporting}
-            activeOpacity={0.75}
+
           >
             {exporting ? (
               <ActivityIndicator size="small" color={theme.accent} />
@@ -106,7 +107,7 @@ export function DangerSection({
             <Text style={[s.dangerBtnText, { color: theme.accent }]}>
               {exporting ? t.settingsExporting : t.settingsExportBtn}
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <View style={[s.dangerBlock, { borderColor: theme.expense + '55' }]}>
@@ -114,14 +115,14 @@ export function DangerSection({
             <Text style={[s.dangerTitle, { color: theme.text }]}>{t.settingsResetData}</Text>
             <Text style={[s.dangerHint, { color: theme.subtext }]}>{t.settingsResetDataHint}</Text>
           </View>
-          <TouchableOpacity
+          <PressableScale
             style={[s.dangerBtn, { backgroundColor: theme.expense + '22', borderColor: theme.expense + '55' }]}
             onPress={handleResetData}
-            activeOpacity={0.75}
+
           >
             <Ionicons name="trash-outline" size={16} color={theme.expense} />
             <Text style={[s.dangerBtnText, { color: theme.expense }]}>{t.settingsResetData}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <View style={[s.dangerBlock, { borderColor: theme.warning + '55' }]}>
@@ -129,14 +130,14 @@ export function DangerSection({
             <Text style={[s.dangerTitle, { color: theme.text }]}>{t.settingsResetSettings}</Text>
             <Text style={[s.dangerHint, { color: theme.subtext }]}>{t.settingsResetSettingsHint}</Text>
           </View>
-          <TouchableOpacity
+          <PressableScale
             style={[s.dangerBtn, { backgroundColor: theme.warning + '22', borderColor: theme.warning + '55' }]}
             onPress={handleResetSettings}
-            activeOpacity={0.75}
+
           >
             <Ionicons name="refresh-outline" size={16} color={theme.warning} />
             <Text style={[s.dangerBtnText, { color: theme.warning }]}>{t.settingsResetSettings}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
     </Section>

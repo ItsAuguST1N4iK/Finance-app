@@ -7,7 +7,8 @@ function midRate(rate: CurrencyRate): number {
 
 /**
  * Convert amount to home currency using Monobank rates (quoted vs UAH).
- * If a required rate is missing, returns the original amount (cannot convert safely).
+ * Prefer {@link tryConvertToHomeCurrency} in aggregations — this helper returns 0
+ * only as a last-resort display fallback and will under-count missing rates.
  */
 export function convertToHomeCurrency(
   amount: number,
@@ -15,7 +16,18 @@ export function convertToHomeCurrency(
   homeCurrency: string,
   rates: CurrencyRate[],
 ): number {
-  if (!amount || fromCurrency === homeCurrency) return amount;
+  return tryConvertToHomeCurrency(amount, fromCurrency, homeCurrency, rates) ?? 0;
+}
+
+/** Same as convertToHomeCurrency but returns null when conversion is impossible. */
+export function tryConvertToHomeCurrency(
+  amount: number,
+  fromCurrency: string,
+  homeCurrency: string,
+  rates: CurrencyRate[],
+): number | null {
+  if (!amount) return 0;
+  if (fromCurrency === homeCurrency) return amount;
 
   const toUah = (amt: number, cur: string): number | null => {
     if (cur === 'UAH') return amt;
@@ -34,7 +46,6 @@ export function convertToHomeCurrency(
   };
 
   const inUah = toUah(amount, fromCurrency);
-  if (inUah == null) return amount;
-  const converted = fromUah(inUah, homeCurrency);
-  return converted ?? amount;
+  if (inUah == null) return null;
+  return fromUah(inUah, homeCurrency);
 }

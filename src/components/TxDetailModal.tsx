@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Pressable,
+  View, Text, StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -10,17 +10,24 @@ import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useCategoryLabels, useAllPickerCategoryKeys } from '../hooks/useCategoryLabels';
 import { BottomSheetModal } from './BottomSheetModal';
+import { PressableScale } from './PressableScale';
+import { WiggleActionIcon } from './MotionIcons';
 import type { UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
 import { dateFnsLocale, numberLocale } from '../utils/locale';
-import { radius, space, type } from '../theme/tokens';
+import { radius, space, stroke, type } from '../theme/tokens';
+import {
+  softBadgeStyle, selectChipStyle, commonStyles, sectionLabelStyle,
+} from '../theme/commonStyles';
 import { storedCategoryKey, categoryForRetag } from '../utils/categories';
 import { getCategoryColor } from '../utils/categoryImpact';
 import { loadCategoryRules } from '../utils/categoryRules';
 import { getTransactionAmountDisplay } from '../utils/transactionDisplay';
 import { typeForCategory } from '../utils/retagTransactions';
 import { getDatabase } from '../db/migrations';
-import { extractRawPayloadFields, parseTradeDescription } from '../utils/txDetailFields';
+import {
+  extractRawPayloadFields, parseTradeDescription, tradeSkipOpts,
+} from '../utils/txDetailFields';
 
 interface Props {
   item: UnifiedTransaction | null;
@@ -54,10 +61,12 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
   const pickerKeys = useAllPickerCategoryKeys();
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [localTx, setLocalTx] = useState<UnifiedTransaction | null>(item);
+  const itemRef = React.useRef(item);
+  itemRef.current = item;
 
   useEffect(() => {
     if (!item) {
-      setLocalTx(null);
+      // Keep localTx until sheet close animation finishes (onClosed).
       return;
     }
     const fresh =
@@ -72,10 +81,41 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
     () => parseTradeDescription(localTx?.description),
     [localTx?.description],
   );
-  const rawRows = useMemo(
-    () => extractRawPayloadFields(localTx?.rawPayload),
-    [localTx?.rawPayload],
-  );
+  const rawRows = useMemo(() => {
+    const tradeOpts = tradeSkipOpts(trade);
+    const skipLabels = new Set<string>([...(tradeOpts.skipLabels ?? [])]);
+    const skipValues = new Set<string>([...(tradeOpts.skipValues ?? [])]);
+
+    if (localTx?.description) {
+      skipLabels.add('Контрагент');
+      skipValues.add(localTx.description);
+    }
+    if (localTx?.mcc != null && localTx.mcc > 0) {
+      skipLabels.add('MCC');
+      skipValues.add(String(localTx.mcc));
+    }
+    if ((localTx?.feeAmount ?? 0) > 0 || localTx?.feeType) {
+      skipLabels.add('Комісія');
+      if (localTx?.feeType) skipValues.add(localTx.feeType);
+      if (localTx?.feeAmount != null) skipValues.add(String(localTx.feeAmount));
+    }
+    if (localTx?.currency) {
+      skipLabels.add('Currency');
+      skipValues.add(localTx.currency);
+    }
+    if (localTx?.exchangeRate != null && localTx.exchangeRate > 0) {
+      skipLabels.add('Курс');
+      skipValues.add(String(localTx.exchangeRate));
+    }
+    if (localTx?.accountId) skipValues.add(localTx.accountId);
+    if (localTx?.externalId) skipValues.add(localTx.externalId);
+    if (localTx?.counterparty) {
+      skipLabels.add('Контрагент');
+      skipValues.add(localTx.counterparty);
+    }
+
+    return extractRawPayloadFields(localTx?.rawPayload, { skipLabels, skipValues });
+  }, [localTx, trade]);
 
   if (!localTx) return null;
 
@@ -130,8 +170,19 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
 
   return (
     <>
-      <BottomSheetModal visible={visible} onClose={onClose} title={t.txDetail} scroll maxHeight="90%">
-        <View style={[styles.amountBox, { backgroundColor: amtColor + '18', borderColor: amtColor + '44' }]}>
+      <BottomSheetModal
+        visible={visible}
+        onClose={onClose}
+        onClosed={() => {
+          if (!itemRef.current) {
+            setLocalTx(null);
+            setShowCategoryPicker(false);
+          }
+        }}
+        title={t.txDetail}
+        scroll
+      >
+        <View style={[styles.amountBox, { backgroundColor: amtColor + '18', borderColor: amtColor + '55' }]}>
           <Text style={[styles.amount, { color: amtColor }]}>
             {sign}{Math.abs(tx.amount).toLocaleString(loc, { maximumFractionDigits: 2 })}
           </Text>
@@ -146,7 +197,7 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
 
         {trade && (
           <>
-            <Text style={[styles.sectionLabel, { color: theme.subtext }]}>{t.txTradeDetails}</Text>
+            <Text style={sectionLabelStyle(theme.subtext, space[1])}>{t.txTradeDetails}</Text>
             <DetailRow label={t.txTradeSide} value={trade.side ?? '—'} theme={theme} />
             <DetailRow label={t.txTradeSymbol} value={trade.symbol ?? '—'} theme={theme} />
             <DetailRow label={t.txTradeQty} value={trade.qty ?? '—'} theme={theme} />
@@ -173,14 +224,19 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
 
         <View style={[styles.row, { borderBottomColor: theme.border }]}>
           <Text style={[styles.rowLabel, { color: theme.subtext }]}>{t.txCategory}</Text>
-          <TouchableOpacity
-            style={[styles.tagChip, { backgroundColor: chipColor + '33', borderColor: chipColor }]}
+          <PressableScale
+            style={softBadgeStyle(chipColor)}
             onPress={() => setShowCategoryPicker(true)}
-            activeOpacity={0.75}
+            scaleTo={0.96}
           >
             <Text style={[styles.tagChipText, { color: chipColor }]}>{categoryLabel}</Text>
-            <Ionicons name="pencil-outline" size={12} color={chipColor} />
-          </TouchableOpacity>
+            <WiggleActionIcon
+              name="pencil-outline"
+              size={12}
+              color={theme.accent}
+              onPress={() => setShowCategoryPicker(true)}
+            />
+          </PressableScale>
         </View>
 
         <DetailRow label={t.txType} value={tx.type} theme={theme} />
@@ -224,7 +280,7 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
 
         {rawRows.length > 0 && (
           <>
-            <Text style={[styles.sectionLabel, { color: theme.subtext }]}>{t.txScraperDetails}</Text>
+            <Text style={sectionLabelStyle(theme.subtext, space[1])}>{t.txScraperDetails}</Text>
             {rawRows.map((r) => (
               <DetailRow key={`${r.label}-${r.value}`} label={r.label} value={r.value} theme={theme} />
             ))}
@@ -232,107 +288,88 @@ export function TxDetailModal({ item, visible, onClose }: Props) {
         )}
       </BottomSheetModal>
 
-      <Modal
+      <BottomSheetModal
         visible={showCategoryPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCategoryPicker(false)}
+        onClose={() => setShowCategoryPicker(false)}
+        title={t.txCategory}
+        scroll
       >
-        <Pressable style={styles.pickerBackdrop} onPress={() => setShowCategoryPicker(false)}>
-          <Pressable
-            style={[styles.pickerSheet, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={styles.pickerHeader}>
-              <Text style={[styles.pickerTitle, { color: theme.text }]}>{t.txCategory}</Text>
-              <TouchableOpacity onPress={() => setShowCategoryPicker(false)} hitSlop={8}>
-                <Ionicons name="close" size={22} color={theme.subtext} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
-              <TouchableOpacity
-                style={[styles.tagOption, styles.autodetectOption, { borderColor: theme.accent }]}
-                onPress={handleClearAndAutodetect}
-                activeOpacity={0.75}
+        <PressableScale
+          style={[
+            selectChipStyle(theme, true),
+            styles.tagOption,
+            { marginBottom: space[3], flexDirection: 'row', alignItems: 'center', gap: space[2] },
+          ]}
+          onPress={handleClearAndAutodetect}
+          scaleTo={0.97}
+        >
+          <Ionicons name="refresh-outline" size={16} color={theme.accent} />
+          <Text style={{ color: theme.accent, flex: 1, fontWeight: '600', fontSize: 14 }}>
+            {t.txClearAndAutodetect}
+          </Text>
+        </PressableScale>
+        <View style={commonStyles.chipRow}>
+          {pickerKeys.map((key) => {
+            const active = categoryKey === key;
+            const color = getCategoryColor(key);
+            return (
+              <PressableScale
+                key={key}
+                style={[
+                  selectChipStyle(
+                    { accent: color, border: theme.border, cardAlt: theme.cardAlt },
+                    active,
+                  ),
+                  { minWidth: '47%', flexGrow: 1 },
+                ]}
+                onPress={() => handleCategorySelect(key)}
+                scaleTo={0.97}
               >
-                <Ionicons name="refresh-outline" size={16} color={theme.accent} />
-                <Text style={[styles.tagOptionText, { color: theme.accent, flex: 1 }]}>
-                  {t.txClearAndAutodetect}
-                </Text>
-              </TouchableOpacity>
-              {pickerKeys.map((key) => {
-                const color = getCategoryColor(key);
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={[
-                      styles.tagOption,
-                      { borderColor: theme.border },
-                      categoryKey === key && { backgroundColor: color + '22' },
-                    ]}
-                    onPress={() => handleCategorySelect(key)}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={[styles.tagOptionText, { color: categoryKey === key ? color : theme.text }]}>
-                      {categoryLabels[key] ?? key}
-                    </Text>
-                    {categoryKey === key && <Ionicons name="checkmark" size={14} color={color} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+                <View style={styles.tagOptionInner}>
+                  <Text style={{
+                    color: active ? color : theme.text,
+                    flex: 1,
+                    fontSize: 14,
+                    fontWeight: '500',
+                  }}>
+                    {categoryLabels[key] ?? key}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={14} color={color} />}
+                </View>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </BottomSheetModal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
   amountBox: {
-    borderRadius: radius.md, borderWidth: 1, padding: space[4], alignItems: 'center', marginBottom: space[3],
+    borderRadius: radius.md,
+    borderWidth: stroke.width,
+    padding: space[4],
+    alignItems: 'center',
+    marginBottom: space[3],
   },
   amount: { ...type.kpi, fontSize: 28 },
   currency: { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6,
-    marginTop: space[3], marginBottom: space[1],
-  },
   row: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingVertical: space[2.5], borderBottomWidth: StyleSheet.hairlineWidth, gap: space[3],
+    paddingVertical: space[2.5], borderBottomWidth: stroke.hairline, gap: space[3],
   },
-  rowLabel: { fontSize: 13, fontWeight: '500', maxWidth: '42%' },
-  rowValue: { fontSize: 14, fontWeight: '600', flexShrink: 1, textAlign: 'right', flex: 1 },
-  tagChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: space[2.5], paddingVertical: 5,
+  rowLabel: { fontSize: 13, fontWeight: '500', maxWidth: '40%' },
+  rowValue: {
+    fontSize: 14, fontWeight: '600', flexShrink: 1, textAlign: 'right', flex: 1,
+    paddingRight: 2,
   },
   tagChipText: { fontSize: 13, fontWeight: '700' },
-  pickerBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-    padding: 16,
-  },
-  pickerSheet: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: space[3],
-    maxHeight: '80%',
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: space[2],
-  },
-  pickerTitle: { fontSize: 16, fontWeight: '700' },
   tagOption: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderRadius: radius.sm, borderWidth: 1, paddingHorizontal: space[3], paddingVertical: space[2.5],
-    marginBottom: 6, gap: 8,
+    paddingVertical: space[2.5],
+    paddingHorizontal: space[3],
   },
-  autodetectOption: { marginBottom: 12 },
-  tagOptionText: { fontSize: 14, fontWeight: '500' },
+  tagOptionInner: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+  },
 });

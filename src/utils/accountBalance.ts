@@ -3,6 +3,9 @@ import { estimateIbkrNativeMarketValue } from './ibkrHoldings';
 
 let balancesDirty = true;
 
+/** Live API balances (e.g. Monobank client-info) — preferred until a statement running balance exists. */
+const liveBalanceOverrides = new Map<string, number>();
+
 /** Call after imports / upserts / deletes so next loadAccounts recomputes. */
 export function markBalancesDirty(): void {
   balancesDirty = true;
@@ -190,17 +193,29 @@ export function computeBalancesFromTransactions(): Map<string, number> {
     }
   }
 
+  // IBKR equity = cash (statement or signed deltas) + open holdings MV — native currency, no FX.
   const map = new Map<string, number>();
-  const accountIds = new Set([...sums.keys(), ...statement.keys()]);
+  const accountIds = new Set([
+    ...sums.keys(),
+    ...statement.keys(),
+    ...liveBalanceOverrides.keys(),
+  ]);
   for (const id of accountIds) {
     const stmt = statement.get(id);
-    let bal = stmt ? stmt.balance : (sums.get(id) ?? 0);
-
-    // Broker card = equity (cash + holdings), not leftover cash after buys
     const ibkrList = ibkrTxs.get(id);
+
+    let bal: number;
     if (ibkrList && ibkrList.length > 0) {
-      const cash = sums.get(id) ?? 0;
+      const cash = stmt ? stmt.balance : (sums.get(id) ?? 0);
       bal = cash + estimateIbkrNativeMarketValue(ibkrList);
+    } else if (stmt) {
+      bal = stmt.balance;
+      liveBalanceOverrides.delete(id);
+    } else if (liveBalanceOverrides.has(id)) {
+      bal = liveBalanceOverrides.get(id)!;
+    } else {
+      // Keep signed reconstructed sum (may be negative: overdraft / incomplete history)
+      bal = sums.get(id) ?? 0;
     }
 
     map.set(id, bal);
@@ -228,12 +243,17 @@ export function refreshAccountBalancesFromTransactions(force = false): Map<strin
   return map;
 }
 
-/** Apply known live balances (e.g. Monobank client-info) after a recompute. */
+/**
+ * Apply known live balances (e.g. Monobank client-info).
+ * Cached until a statement running balance appears for that account, so later
+ * recomputes from incomplete history do not wipe the live figure.
+ */
 export function applyLiveBalances(entries: Array<{ accountId: string; balance: number }>): void {
   if (entries.length === 0) return;
   const db = getDatabase();
   db.withTransactionSync(() => {
     for (const e of entries) {
+      liveBalanceOverrides.set(e.accountId, e.balance);
       db.runSync('UPDATE accounts SET balance = ? WHERE id = ?', [e.balance, e.accountId]);
     }
   });

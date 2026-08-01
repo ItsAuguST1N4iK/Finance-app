@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Modal,
+  View, Text, StyleSheet,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,11 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { currencySymbol } from '../../utils/currency';
 import { ALL_CURRENCIES } from '../../constants/currencies';
 import { getDatabase } from '../../db/migrations';
+import { FadeModal } from '../../components/FadeModal';
+import { PressableScale } from '../../components/PressableScale';
+import { HourglassSpinner } from '../../components/HourglassSpinner';
+import { ChevronToggle } from '../../components/MotionIcons';
+import { radius, stroke } from '../../theme/tokens';
 
 // ─── Exchange Rates Widget ────────────────────────────
 
@@ -94,24 +99,23 @@ export function ExchangeRatesWidget() {
       <View style={[erStyles.header, { borderBottomColor: theme.border }]}>
         <View style={erStyles.headerLeft}>
           <Text style={[erStyles.baseCurrencyLabel, { color: theme.subtext }]}>{t.dashBaseCurrency}</Text>
-          <TouchableOpacity
+          <PressableScale
             style={[erStyles.baseCurrencyBtn, { backgroundColor: theme.accent + '22', borderColor: theme.accent + '66' }]}
             onPress={() => setPickerVisible(true)}
-            activeOpacity={0.75}
           >
             <Text style={[erStyles.baseCurrencyBtnText, { color: theme.accent }]}>
               {currencySymbol(baseCurrency)} {baseCurrency}
             </Text>
-            <Ionicons name="chevron-down" size={12} color={theme.accent} />
-          </TouchableOpacity>
+            <ChevronToggle expanded={pickerVisible} size={12} color={theme.accent} />
+          </PressableScale>
         </View>
-        <TouchableOpacity onPress={fetchRates} disabled={isLoading} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }} activeOpacity={0.75}>
-          <Ionicons
-            name={isLoading ? 'hourglass-outline' : 'refresh-outline'}
-            size={16}
-            color={theme.accent}
-          />
-        </TouchableOpacity>
+        <PressableScale onPress={fetchRates} disabled={isLoading} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          {isLoading ? (
+            <HourglassSpinner active size={16} color={theme.accent} />
+          ) : (
+            <Ionicons name="refresh-outline" size={16} color={theme.accent} />
+          )}
+        </PressableScale>
       </View>
 
       <View style={erStyles.tableHeader}>
@@ -143,30 +147,26 @@ export function ExchangeRatesWidget() {
       )}
 
       {/* Base currency picker modal */}
-      <Modal visible={pickerVisible} transparent animationType="fade" statusBarTranslucent>
-        <TouchableOpacity
-          style={[erStyles.pickerOverlay, { backgroundColor: theme.overlay }]}
-          activeOpacity={1}
-          onPress={() => setPickerVisible(false)}
-        >
-          <View style={[erStyles.pickerSheet, cardSurface(), { borderColor: theme.border }]}>
-            <Text style={[erStyles.pickerTitle, { color: theme.text }]}>{t.dashBaseCurrency}</Text>
-            {ALL_CURRENCIES.map((code) => (
-              <TouchableOpacity
-                key={code}
-                style={[erStyles.pickerItem, code === baseCurrency && { backgroundColor: theme.accent + '22' }]}
-                onPress={() => saveBaseCurrency(code)}
-                activeOpacity={0.75}
-              >
-                <Text style={[erStyles.pickerItemText, { color: code === baseCurrency ? theme.accent : theme.text }]}>
-                  {currencySymbol(code)} {code}
-                </Text>
-                {code === baseCurrency && <Ionicons name="checkmark" size={16} color={theme.accent} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <FadeModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        title={t.dashBaseCurrency}
+      >
+        {ALL_CURRENCIES.map((code) => (
+          <PressableScale
+            key={code}
+            style={[erStyles.pickerItem, code === baseCurrency && { backgroundColor: theme.accent + '22' }]}
+            contentStyle={erStyles.pickerItemInner}
+            onPress={() => saveBaseCurrency(code)}
+            scaleTo={0.97}
+          >
+            <Text style={[erStyles.pickerItemText, { color: code === baseCurrency ? theme.accent : theme.text }]}>
+              {currencySymbol(code)} {code}
+            </Text>
+            {code === baseCurrency && <Ionicons name="checkmark" size={16} color={theme.accent} />}
+          </PressableScale>
+        ))}
+      </FadeModal>
     </View>
   );
 }
@@ -181,7 +181,7 @@ const erStyles = StyleSheet.create({
   baseCurrencyLabel:    { fontSize: 12, fontWeight: '600' },
   baseCurrencyBtn:      {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1,
+    borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 5, borderWidth: stroke.width,
   },
   baseCurrencyBtnText:  { fontSize: 13, fontWeight: '700' },
   tableHeader: {
@@ -195,9 +195,10 @@ const erStyles = StyleSheet.create({
   hint:     { fontSize: 10, marginTop: 8, textAlign: 'right' },
   pickerOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   pickerSheet: {
-    borderRadius: 16, padding: 16, borderWidth: 1, width: '100%',
+    borderRadius: radius.lg, padding: 16, borderWidth: stroke.width, width: '100%',
   },
   pickerTitle:    { fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  pickerItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderRadius: 8, paddingHorizontal: 8 },
+  pickerItem:     { borderRadius: 8, marginBottom: 2 },
+  pickerItemInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 8 },
   pickerItemText: { fontSize: 15, fontWeight: '500' },
 });

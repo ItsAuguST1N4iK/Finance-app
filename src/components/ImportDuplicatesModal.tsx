@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, StyleSheet, Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -9,6 +9,9 @@ import { useLanguage } from '../i18n/LanguageContext';
 import type { UnifiedTransaction } from '../types';
 import { dateFnsLocale, numberLocale } from '../utils/locale';
 import { getTransactionAmountDisplay } from '../utils/transactionDisplay';
+import { BottomSheetModal } from './BottomSheetModal';
+import { PressableScale } from './PressableScale';
+import { radius, space } from '../theme/tokens';
 
 export interface ImportDuplicatesModalProps {
   visible: boolean;
@@ -65,165 +68,130 @@ export function ImportDuplicatesModal({
   const selectedTxs = duplicates.filter((_, idx) => selected.has(keys[idx]));
 
   return (
-    <Modal
+    <BottomSheetModal
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-      statusBarTranslucent
-    >
-      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-          <Text style={[styles.message, { color: theme.subtext }]}>{message}</Text>
-          <Text style={[styles.hint, { color: theme.accent }]}>
-            {t.importDuplicatesSelectHint}
-          </Text>
-
-          <View style={styles.listHeader}>
-            <Text style={[styles.listLabel, { color: theme.subtext }]}>
-              {t.importDuplicatesListLabel
-                .replace('{count}', String(duplicates.length))}
-              {selectedCount > 0 ? ` · ${selectedCount}` : ''}
+      onClose={onCancel}
+      title={title}
+      footer={(
+        <View style={styles.actions}>
+          <PressableScale style={styles.actionBtn} onPress={onCancel} scaleTo={0.97}>
+            <Text style={[styles.actionText, { color: theme.subtext, fontWeight: '400' }]}>
+              {t.importCancelImport}
             </Text>
-            <View style={styles.selectActions}>
-              <TouchableOpacity onPress={selectAll} hitSlop={8}>
-                <Text style={[styles.selectLink, { color: theme.accent }]}>{t.importSelectAll}</Text>
-              </TouchableOpacity>
-              <Text style={{ color: theme.border }}>|</Text>
-              <TouchableOpacity onPress={selectNone} hitSlop={8}>
-                <Text style={[styles.selectLink, { color: theme.subtext }]}>{t.importSelectNone}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <ScrollView
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
+          </PressableScale>
+          <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
+          <PressableScale style={styles.actionBtn} onPress={onAddWithoutDuplicates} scaleTo={0.97}>
+            <Text style={[styles.actionText, { color: theme.accent }]}>
+              {t.importAddWithoutDuplicates}
+            </Text>
+          </PressableScale>
+          <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
+          <PressableScale
+            style={styles.actionBtn}
+            disabled={selectedCount === 0}
+            onPress={() => {
+              if (selectedCount === 0) return;
+              onAddWithDuplicates(selectedTxs);
+            }}
+            scaleTo={0.97}
           >
-            {duplicates.map((tx, idx) => {
-              const key = keys[idx];
-              const isOn = selected.has(key);
-              const { sign, color } = getTransactionAmountDisplay(tx, theme);
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.row,
-                    {
-                      borderBottomColor: theme.border,
-                      backgroundColor: isOn ? theme.accent + '18' : 'transparent',
-                      borderLeftColor: isOn ? theme.accent : 'transparent',
-                    },
-                  ]}
-                  onPress={() => toggle(key)}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons
-                    name={isOn ? 'checkbox' : 'square-outline'}
-                    size={22}
-                    color={isOn ? theme.accent : theme.subtext}
-                    style={{ marginTop: 2 }}
-                  />
-                  <View style={styles.rowMain}>
-                    <Text style={[styles.rowDesc, { color: theme.text }]} numberOfLines={2}>
-                      {tx.description?.trim() || t.txTransaction}
-                    </Text>
-                    <Text style={[styles.rowDate, { color: theme.subtext }]}>
-                      {format(tx.transactionDate, 'd MMM yyyy, HH:mm', { locale: dateLoc })}
-                    </Text>
-                  </View>
-                  <Text style={[styles.rowAmount, { color }]}>
-                    {sign}{Math.abs(tx.amount).toLocaleString(loc, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}{tx.currency}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+            <Text style={[styles.actionText, { color: theme.expense }]}>
+              {t.importAddWithDuplicates}
+              {selectedCount > 0 ? ` (${selectedCount})` : ''}
+            </Text>
+          </PressableScale>
+        </View>
+      )}
+    >
+      <Text style={[styles.message, { color: theme.subtext }]}>{message}</Text>
+      <Text style={[styles.hint, { color: theme.accent }]}>
+        {t.importDuplicatesSelectHint}
+      </Text>
 
-          <View style={[styles.actions, { borderTopColor: theme.border }]}>
-            <TouchableOpacity style={styles.actionBtn} onPress={onCancel} activeOpacity={0.7}>
-              <Text style={[styles.actionText, { color: theme.subtext, fontWeight: '400' }]}>
-                {t.importCancelImport}
-              </Text>
-            </TouchableOpacity>
-            <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
-            <TouchableOpacity style={styles.actionBtn} onPress={onAddWithoutDuplicates} activeOpacity={0.7}>
-              <Text style={[styles.actionText, { color: theme.accent }]}>
-                {t.importAddWithoutDuplicates}
-              </Text>
-            </TouchableOpacity>
-            <View style={[styles.actionDivider, { backgroundColor: theme.border }]} />
-            <TouchableOpacity
-              style={[styles.actionBtn, selectedCount === 0 && { opacity: 0.4 }]}
-              onPress={() => {
-                if (selectedCount === 0) return;
-                onAddWithDuplicates(selectedTxs);
-              }}
-              activeOpacity={0.7}
-              disabled={selectedCount === 0}
-            >
-              <Text style={[styles.actionText, { color: theme.expense }]}>
-                {t.importAddWithDuplicates}
-                {selectedCount > 0 ? ` (${selectedCount})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
+      <View style={styles.listHeader}>
+        <Text style={[styles.listLabel, { color: theme.subtext }]}>
+          {t.importDuplicatesListLabel
+            .replace('{count}', String(duplicates.length))}
+          {selectedCount > 0 ? ` · ${selectedCount}` : ''}
+        </Text>
+        <View style={styles.selectActions}>
+          <PressableScale onPress={selectAll} hitSlop={8} scaleTo={0.95}>
+            <Text style={[styles.selectLink, { color: theme.accent }]}>{t.importSelectAll}</Text>
+          </PressableScale>
+          <View style={{ width: 1, height: 12, backgroundColor: theme.border, borderRadius: 1 }} />
+          <PressableScale onPress={selectNone} hitSlop={8} scaleTo={0.95}>
+            <Text style={[styles.selectLink, { color: theme.subtext }]}>{t.importSelectNone}</Text>
+          </PressableScale>
         </View>
       </View>
-    </Modal>
+
+      {duplicates.map((tx, idx) => {
+        const key = keys[idx];
+        const isOn = selected.has(key);
+        const { sign, color } = getTransactionAmountDisplay(tx, theme);
+        return (
+          <Pressable
+            key={key}
+            style={({ pressed }) => [
+              styles.row,
+              {
+                borderBottomColor: theme.border,
+                backgroundColor: isOn ? theme.accent + '18' : 'transparent',
+                borderLeftColor: isOn ? theme.accent : 'transparent',
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+            onPress={() => toggle(key)}
+          >
+            <View style={styles.rowInner}>
+              <Ionicons
+                name={isOn ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={isOn ? theme.accent : theme.subtext}
+                style={{ marginTop: 2 }}
+              />
+              <View style={styles.rowMain}>
+                <Text style={[styles.rowDesc, { color: theme.text }]} numberOfLines={2}>
+                  {tx.description?.trim() || t.txTransaction}
+                </Text>
+                <Text style={[styles.rowDate, { color: theme.subtext }]}>
+                  {format(tx.transactionDate, 'd MMM yyyy, HH:mm', { locale: dateLoc })}
+                </Text>
+              </View>
+              <Text style={[styles.rowAmount, { color }]}>
+                {sign}{Math.abs(tx.amount).toLocaleString(loc, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{' '}{tx.currency}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  card: {
-    width: '100%',
-    maxHeight: '85%',
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-    paddingTop: 20,
-    paddingHorizontal: 20,
-  },
   message: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    paddingTop: 8,
-    paddingHorizontal: 20,
+    marginBottom: space[2],
   },
   hint: {
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 17,
-    paddingTop: 8,
-    paddingBottom: 10,
-    paddingHorizontal: 20,
+    marginBottom: space[3],
     fontWeight: '600',
   },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 6,
-    gap: 8,
+    marginBottom: space[2],
+    gap: space[2],
   },
   listLabel: {
     fontSize: 12,
@@ -232,40 +200,34 @@ const styles = StyleSheet.create({
   },
   selectActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   selectLink: { fontSize: 12, fontWeight: '600' },
-  list: {
-    maxHeight: 280,
-    marginHorizontal: 8,
-  },
-  listContent: {
-    paddingBottom: 4,
-  },
   row: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
+    borderRadius: radius.sm,
+    marginBottom: 2,
+  },
+  rowInner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: 3,
-    borderRadius: 8,
   },
   rowMain: { flex: 1 },
   rowDesc: { fontSize: 13, fontWeight: '500' },
   rowDate: { fontSize: 11, marginTop: 2 },
   rowAmount: { fontSize: 13, fontWeight: '700' },
   actions: {
-    borderTopWidth: 1,
-    marginTop: 4,
+    gap: 0,
   },
   actionBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   actionDivider: { height: StyleSheet.hairlineWidth },
   actionText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },

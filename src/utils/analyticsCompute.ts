@@ -8,7 +8,7 @@ import type {
   ChartBar,
   CurrencyRate,
 } from '../types';
-import { convertToHomeCurrency } from './currencyConvert';
+import { tryConvertToHomeCurrency } from './currencyConvert';
 import { isInvestmentPurchase, isInvestmentExit, storedCategoryKey } from './categories';
 import { getCategoryImpact } from './categoryImpact';
 import {
@@ -209,10 +209,11 @@ function aggregateTxs(
     if (!map[key]) {
       map[key] = { label: labelFn(txDate), year: txDate.getFullYear(), income: 0, expense: 0 };
     }
-    const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+    const converted = tryConvertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+    if (converted == null) continue;
     const feeAmt = feeAmountAsExpense(tx);
     const feeConverted = feeAmt > 0
-      ? convertToHomeCurrency(feeAmt, tx.fee_currency ?? tx.currency, homeCurrency, rates)
+      ? (tryConvertToHomeCurrency(feeAmt, tx.fee_currency ?? tx.currency, homeCurrency, rates) ?? 0)
       : 0;
     applyPnL(map[key], tx, converted, excludeSelfTransfers, feeConverted);
   }
@@ -405,8 +406,8 @@ function buildMultiYearBarsFromTxs(
 
 function getDataBoundedRange(
   txs: AnalyticsRawTx[],
-  homeCurrency: string,
-  rates: CurrencyRate[],
+  _homeCurrency: string,
+  _rates: CurrencyRate[],
   excludeSelfTransfers: boolean,
 ): { dateFrom: number; dateTo: number } | null {
   let minD: number | null = null;
@@ -414,8 +415,7 @@ function getDataBoundedRange(
 
   for (const tx of txs) {
     if (!isInvestmentPurchase(tx) && !isAnalyticsTx(tx, excludeSelfTransfers)) continue;
-    const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
-    if (converted <= 0) continue;
+    // Bound by raw dates — do not skip rows just because FX rates are missing
     if (minD === null || tx.transaction_date < minD) minD = tx.transaction_date;
     if (maxD === null || tx.transaction_date > maxD) maxD = tx.transaction_date;
   }
@@ -485,9 +485,10 @@ export function computeAnalytics(
 
   for (const tx of rawTxs) {
     const feeCur = tx.fee_currency ?? tx.currency;
-    const feeConverted = convertToHomeCurrency(tx.fee_amount ?? 0, feeCur, homeCurrency, rates);
+    const feeConverted = tryConvertToHomeCurrency(tx.fee_amount ?? 0, feeCur, homeCurrency, rates) ?? 0;
     const effectiveCat = storedCategoryKey(tx);
-    const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+    const converted = tryConvertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+    if (converted == null) continue;
 
     if (isInvestmentPurchase(tx)) {
       investmentTxCount += 1;
@@ -512,7 +513,7 @@ export function computeAnalytics(
       // Fees count as expenses (also tracked separately for fees KPI)
       const feeExtra = feeAmountAsExpense(tx);
       const feeExtraConverted = feeExtra > 0
-        ? convertToHomeCurrency(feeExtra, feeCur, homeCurrency, rates)
+        ? (tryConvertToHomeCurrency(feeExtra, feeCur, homeCurrency, rates) ?? 0)
         : 0;
       const feesForKpi = feeConverted > 0 ? feeConverted : (
         (tx.type === 'fee' || effectiveCat === 'fee') ? converted : 0

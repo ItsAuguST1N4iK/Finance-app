@@ -1,29 +1,29 @@
 import { StyleSheet } from 'react-native';
 import type { AppTheme } from '../../theme';
-import { layout, radius, space, type } from '../../theme/tokens';
+import { radius, space, stroke, type } from '../../theme/tokens';
 
 export function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.bg },
-    hintText: { color: t.subtext, fontSize: 13, lineHeight: 18 },
-    glassPreview: { borderRadius: radius.md, borderWidth: 1, padding: space[3] + 2 },
+    hintText: { color: t.subtext, fontSize: 12, lineHeight: 16 },
+    glassPreview: { borderRadius: radius.md, borderWidth: stroke.width, padding: space[3] },
 
     themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
     themeBtn: {
       width: '48%', height: 80, alignItems: 'center', justifyContent: 'center',
       padding: space[2.5], backgroundColor: t.cardAlt, borderRadius: radius.md,
-      borderWidth: 2, borderColor: t.border, gap: 6,
+      borderWidth: stroke.width, borderColor: t.border, gap: 6,
     },
     themeDot: { width: 26, height: 26, borderRadius: 13 },
     themeBtnLabel: { color: t.subtext, fontSize: 10, fontWeight: '600', textAlign: 'center' },
     accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2.5] },
     accentDot: { width: 34, height: 34, borderRadius: 17 },
-    accentDotActive: { borderWidth: 3, borderColor: t.onAccent },
+    accentDotActive: { borderWidth: stroke.width + 1, borderColor: t.onAccent },
 
     langRow: { flexDirection: 'row', gap: space[2.5] },
     langBtn: {
       flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 6, padding: space[3], borderRadius: radius.md, borderWidth: 1.5,
+      gap: 6, padding: space[3], borderRadius: radius.md, borderWidth: stroke.width,
       borderColor: t.border, backgroundColor: t.cardAlt,
     },
     langBtnText: { fontSize: 14, fontWeight: '600' },
@@ -31,13 +31,13 @@ export function makeStyles(t: AppTheme) {
     currenciesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
     currencyChip: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingHorizontal: space[3], paddingVertical: 7, borderRadius: radius.md, borderWidth: 1,
+      paddingHorizontal: space[3], paddingVertical: 7, borderRadius: radius.md, borderWidth: stroke.width,
     },
     currencyChipText: { fontSize: 13, fontWeight: '600' },
 
     noteBox: {
       flexDirection: 'row', alignItems: 'flex-start', gap: space[2],
-      borderRadius: radius.md, borderWidth: 1, padding: space[2.5],
+      borderRadius: radius.md, borderWidth: stroke.width, padding: space[2.5],
     },
     noteTitle: { ...type.meta, fontWeight: '700', marginBottom: 2 },
     noteText: { fontSize: 12, lineHeight: 16 },
@@ -57,12 +57,12 @@ export function makeStyles(t: AppTheme) {
     tokenHint: { color: t.subtext, fontSize: 12, marginBottom: space[2.5] },
     inputRow: { flexDirection: 'row', gap: space[2], marginBottom: space[2] },
     input: {
-      backgroundColor: t.inputBg, borderRadius: radius.sm, padding: space[3],
-      color: t.text, fontSize: 14, borderWidth: 1, borderColor: t.border,
+      backgroundColor: t.inputBg, borderRadius: radius.md, padding: space[3],
+      color: t.text, fontSize: 14, borderWidth: stroke.width, borderColor: t.border,
     },
     eyeBtn: {
-      backgroundColor: t.inputBg, borderRadius: radius.sm, padding: space[3],
-      borderWidth: 1, borderColor: t.border,
+      backgroundColor: t.inputBg, borderRadius: radius.md, padding: space[3],
+      borderWidth: stroke.width, borderColor: t.border,
     },
     saveBtn: {
       backgroundColor: t.accent, borderRadius: radius.md, padding: space[3],
@@ -70,20 +70,20 @@ export function makeStyles(t: AppTheme) {
     },
     saveBtnText: { color: t.onAccent, fontWeight: '600' },
     viewTokenBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: space[2], borderRadius: radius.sm,
-      borderWidth: 1, padding: space[2.5], marginBottom: space[2], justifyContent: 'center',
+      flexDirection: 'row', alignItems: 'center', gap: space[2], borderRadius: radius.md,
+      borderWidth: stroke.width, padding: space[2.5], marginBottom: space[2], justifyContent: 'center',
     },
     viewTokenText: { fontSize: 13, fontWeight: '600' },
     storedTokenBox: {
-      flexDirection: 'row', alignItems: 'center', gap: space[2], borderRadius: radius.sm,
-      borderWidth: 1, padding: space[2.5], marginBottom: space[2],
+      flexDirection: 'row', alignItems: 'center', gap: space[2], borderRadius: radius.md,
+      borderWidth: stroke.width, padding: space[2.5], marginBottom: space[2],
     },
     storedTokenValue: { flex: 1, fontSize: 13, fontFamily: 'monospace' },
     deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
     deleteBtnText: { fontSize: 13 },
     instrToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 4 },
     instrToggleText: { fontSize: 12, fontWeight: '600' },
-    instrBox: { borderRadius: radius.sm, borderWidth: 1, padding: space[2.5], marginBottom: space[2] },
+    instrBox: { borderRadius: radius.md, borderWidth: stroke.width, padding: space[2.5], marginBottom: space[2] },
     instrText: { fontSize: 12, lineHeight: 18 },
 
     accountRow: {
@@ -101,19 +101,20 @@ export function makeStyles(t: AppTheme) {
 
     dangerBlock: {
       flexDirection: 'row', alignItems: 'center', gap: space[3],
-      borderRadius: radius.md, borderWidth: 1, padding: 14,
+      borderRadius: radius.md, borderWidth: stroke.width, padding: 14,
     },
     dangerTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
     dangerHint: { fontSize: 12 },
     dangerBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.sm,
-      borderWidth: 1, paddingHorizontal: space[2.5], paddingVertical: space[2],
+      flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.md,
+      borderWidth: stroke.width, paddingHorizontal: space[2.5], paddingVertical: space[2],
     },
     dangerBtnText: { fontSize: 13, fontWeight: '600' },
 
-    aboutSection: { marginTop: space[6], alignItems: 'center', paddingBottom: space[5] },
-    aboutTitle: { color: t.subtext, fontSize: 14, fontWeight: '600', marginBottom: space[2] },
-    aboutText: { color: t.subtext, fontSize: 13, textAlign: 'center', lineHeight: 20 },
+    /** Tight under last section — not pushed toward the tab bar */
+    aboutSection: { marginTop: space[2], alignItems: 'center', paddingTop: space[1], paddingBottom: 0 },
+    aboutTitle: { color: t.subtext, fontSize: 13, fontWeight: '600', marginBottom: 2 },
+    aboutText: { color: t.subtext, fontSize: 12, textAlign: 'center', lineHeight: 17 },
   });
 }
 

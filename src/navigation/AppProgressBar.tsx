@@ -1,32 +1,66 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAppProgressStore } from '../store/appProgressSlice';
+import { reEasing } from '../theme/reMotion';
+import { TAB_BAR_GAP, TAB_ISLAND_HEIGHT } from './IslandTabBar';
 
-/** Full-width progress strip above the tab island. */
+/** Full-width progress strip — UI-thread appear + fill (no JS-driver width). */
 export function AppProgressBar() {
-  const { theme } = useTheme();
+  const { theme, calmDur } = useTheme();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const progress = useAppProgressStore((s) => s.progress);
+  const fillPct = useSharedValue(0);
+  const appear = useSharedValue(0);
+
+  const pct = progress && progress.total > 0
+    ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+    : 0;
+
+  useEffect(() => {
+    if (!progress) {
+      appear.value = 0;
+      fillPct.value = 0;
+      return;
+    }
+    appear.value = withTiming(1, {
+      duration: calmDur(360),
+      easing: reEasing.easeOut,
+    });
+    fillPct.value = withTiming(pct, {
+      duration: calmDur(520),
+      easing: reEasing.easeOut,
+    });
+  }, [progress, pct, calmDur, appear, fillPct]);
+
+  const wrapStyle = useAnimatedStyle(() => ({
+    opacity: appear.value,
+    transform: [{ translateY: (1 - appear.value) * 8 }],
+  }));
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${fillPct.value}%`,
+  }));
 
   if (!progress) return null;
 
-  const pct = progress.total > 0
-    ? Math.min(100, Math.round((progress.current / progress.total) * 100))
-    : 0;
   const countLabel = `${progress.current}/${progress.total}`;
   const queueHint = progress.queueLeft && progress.queueLeft > 0
     ? t.appProgressQueueLeft.replace('{n}', String(progress.queueLeft))
     : null;
 
-  // Sit just above the floating island tab bar (~62 + safe area)
-  const bottom = insets.bottom + 70;
+  const bottom = Math.max(insets.bottom, 8) + TAB_ISLAND_HEIGHT + TAB_BAR_GAP;
 
   return (
-    <View
+    <Animated.View
       pointerEvents="none"
       style={[
         styles.wrap,
@@ -35,6 +69,7 @@ export function AppProgressBar() {
           backgroundColor: theme.isDark ? '#141414' : '#f4f4f5',
           borderColor: theme.border,
         },
+        wrapStyle,
       ]}
     >
       <View style={styles.row}>
@@ -45,14 +80,14 @@ export function AppProgressBar() {
         <Text style={[styles.pct, { color: theme.subtext }]}>{pct}%</Text>
       </View>
       <View style={[styles.track, { backgroundColor: theme.isDark ? '#1a1a1a' : '#d4d4d4' }]}>
-        <View style={[styles.fill, { backgroundColor: theme.accent, width: `${pct}%` }]} />
+        <Animated.View style={[styles.fill, { backgroundColor: theme.accent }, fillStyle]} />
       </View>
       {queueHint ? (
         <Text style={[styles.queue, { color: theme.subtext }]} numberOfLines={1}>
           {queueHint}
         </Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

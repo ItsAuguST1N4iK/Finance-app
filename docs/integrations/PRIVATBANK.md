@@ -1,4 +1,4 @@
-# PrivatBank Integration
+# PrivatBank Integration — Finance Control v10.2.5
 
 ## Доступні методи
 

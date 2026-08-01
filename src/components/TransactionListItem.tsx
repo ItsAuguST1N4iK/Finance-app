@@ -1,12 +1,12 @@
 import React, { memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { format } from 'date-fns';
-import { useTheme } from '../theme/ThemeContext';
+import { useThemeVisual } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { UnifiedTransaction } from '../types';
 import { currencySymbol } from '../utils/currency';
 import { numberLocale } from '../utils/locale';
-import { radius, space, type } from '../theme/tokens';
+import { radius, space, stroke, type } from '../theme/tokens';
 import { storedCategoryKey } from '../utils/categories';
 import { getCategoryColor } from '../utils/categoryImpact';
 import { getTransactionAmountDisplay } from '../utils/transactionDisplay';
@@ -16,13 +16,14 @@ interface Props {
   categoryLabels: Record<string, string>;
   accountColor: string;
   accountName: string;
-  onPress?: () => void;
+  /** Stable handler — pass setState or useCallback; item is supplied by this row. */
+  onPress?: (item: UnifiedTransaction) => void;
 }
 
 function TransactionListItemInner({
   item, categoryLabels, accountColor, accountName, onPress,
 }: Props) {
-  const { theme } = useTheme();
+  const { theme } = useThemeVisual();
   const { t, language } = useLanguage();
   const loc = numberLocale(language);
   const isCancellation = storedCategoryKey(item) === 'cancellation'
@@ -75,19 +76,21 @@ function TransactionListItemInner({
 
   if (onPress) {
     return (
-      <TouchableOpacity
-        style={[styles.row, { borderBottomColor: theme.border, opacity: rowOpacity }]}
-        onPress={onPress}
-        activeOpacity={0.75}
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          { borderBottomColor: theme.border, opacity: rowOpacity * (pressed ? 0.72 : 1) },
+        ]}
+        onPress={() => onPress(item)}
       >
-        {content}
-      </TouchableOpacity>
+        <View style={styles.rowInner}>{content}</View>
+      </Pressable>
     );
   }
 
   return (
     <View style={[styles.row, { borderBottomColor: theme.border, opacity: rowOpacity }]}>
-      {content}
+      <View style={styles.rowInner}>{content}</View>
     </View>
   );
 }
@@ -113,8 +116,11 @@ export const TransactionListItem = memo(
 
 const styles = StyleSheet.create({
   row: {
+    borderBottomWidth: 1,
+  },
+  rowInner: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: space[3], borderBottomWidth: 1,
+    paddingVertical: space[3],
   },
   colorBar: { width: 3, borderRadius: 2, alignSelf: 'stretch', marginRight: space[2.5], minHeight: 36 },
   left: { flex: 1, marginRight: space[2] },
@@ -126,7 +132,7 @@ const styles = StyleSheet.create({
   tagChip: {
     alignSelf: 'flex-start',
     borderRadius: radius.xs,
-    borderWidth: 1,
+    borderWidth: stroke.width,
     paddingHorizontal: space[2],
     paddingVertical: 2,
     maxWidth: '100%',

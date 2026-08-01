@@ -30,7 +30,7 @@ export const THEMES: Record<ThemeKey, BaseTheme> = {
     bg: '#0f172a',
     card: '#1e293b',
     cardAlt: '#334155',
-    border: '#334155',
+    border: '#3f4f66',
     text: '#f1f5f9',
     subtext: '#94a3b8',
     income: '#22c55e',
@@ -38,19 +38,19 @@ export const THEMES: Record<ThemeKey, BaseTheme> = {
     warning: '#f59e0b',
     onAccent: '#ffffff',
     tabBar: '#1a2744',
-    tabBarBorder: '#253356',
+    tabBarBorder: '#2d3f5c',
     header: '#0f172a',
     inputBg: '#0f172a',
-    overlay: 'rgba(0,0,0,0.72)',
+    overlay: 'rgba(0,0,0,0.52)',
     shadow: '#000000',
-    glassBorder: 'rgba(255,255,255,0.12)',
+    glassBorder: 'rgba(148,163,184,0.28)',
     isDark: true,
   },
   cursor: {
     bg: '#1e1e1e',
     card: '#2a2a2a',
     cardAlt: '#333333',
-    border: '#3d3d3d',
+    border: '#4a4a4a',
     text: '#e8e8e8',
     subtext: '#888888',
     income: '#4ade80',
@@ -58,39 +58,39 @@ export const THEMES: Record<ThemeKey, BaseTheme> = {
     warning: '#fbbf24',
     onAccent: '#ffffff',
     tabBar: '#242424',
-    tabBarBorder: '#383838',
+    tabBarBorder: '#404040',
     header: '#1e1e1e',
     inputBg: '#161616',
-    overlay: 'rgba(0,0,0,0.78)',
+    overlay: 'rgba(0,0,0,0.55)',
     shadow: '#000000',
-    glassBorder: 'rgba(255,255,255,0.12)',
+    glassBorder: 'rgba(255,255,255,0.18)',
     isDark: true,
   },
   oled: {
     bg: '#000000',
-    card: '#0d0d0d',
-    cardAlt: '#1a1a1a',
-    border: '#2a2a2a',
+    card: '#121212',
+    cardAlt: '#1c1c1c',
+    border: '#3a3a3a',
     text: '#ffffff',
-    subtext: '#777777',
+    subtext: '#a3a3a3',
     income: '#00e676',
     expense: '#ff1744',
     warning: '#ffab00',
     onAccent: '#ffffff',
     tabBar: '#000000',
-    tabBarBorder: '#1a1a1a',
+    tabBarBorder: '#2a2a2a',
     header: '#000000',
-    inputBg: '#0d0d0d',
-    overlay: 'rgba(0,0,0,0.88)',
+    inputBg: '#121212',
+    overlay: 'rgba(0,0,0,0.55)',
     shadow: '#000000',
-    glassBorder: 'rgba(255,255,255,0.14)',
+    glassBorder: 'rgba(255,255,255,0.2)',
     isDark: true,
   },
   light: {
     bg: '#f8fafc',
     card: '#ffffff',
     cardAlt: '#f1f5f9',
-    border: '#e2e8f0',
+    border: '#cbd5e1',
     text: '#0f172a',
     subtext: '#64748b',
     income: '#16a34a',
@@ -98,12 +98,12 @@ export const THEMES: Record<ThemeKey, BaseTheme> = {
     warning: '#d97706',
     onAccent: '#ffffff',
     tabBar: '#ffffff',
-    tabBarBorder: '#e2e8f0',
+    tabBarBorder: '#cbd5e1',
     header: '#ffffff',
     inputBg: '#f8fafc',
     overlay: 'rgba(0,0,0,0.50)',
     shadow: '#0f172a',
-    glassBorder: 'rgba(15,23,42,0.08)',
+    glassBorder: 'rgba(15,23,42,0.12)',
     isDark: false,
   },
 };
@@ -118,15 +118,22 @@ export const THEME_LABELS: Record<ThemeKey, string> = {
 export const DEFAULT_ACCENT = '#3b82f6';
 
 export const ACCENT_PRESETS = [
-  '#3b82f6',
-  '#8b5cf6',
-  '#06b6d4',
-  '#10b981',
-  '#f59e0b',
-  '#ef4444',
-  '#ec4899',
-  '#f97316',
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#06b6d4', // cyan
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#ef4444', // red
+  '#ec4899', // pink
+  // row 2
+  '#f97316', // orange
+  '#14b8a6', // teal
+  '#6366f1', // indigo
+  '#84cc16', // lime
+  '#e11d48', // rose
+  '#a855f7', // purple
+  '#0ea5e9', // sky
 ];
 
-export { space, radius, type, layout } from './tokens';
+export { space, radius, type, layout, stroke } from './tokens';
 export { sectionLabelStyle, primaryButtonStyle, ghostButtonStyle, commonStyles } from './commonStyles';

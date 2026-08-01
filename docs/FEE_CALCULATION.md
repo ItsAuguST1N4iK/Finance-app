@@ -1,4 +1,4 @@
-# FEE CALCULATION — Finance Control Mobile App
+# FEE CALCULATION — Finance Control v10.2.5
 
 ## Принципи
 

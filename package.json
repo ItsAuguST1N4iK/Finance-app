@@ -1,14 +1,14 @@
 {
   "name": "finance-control",
-  "version": "10.2.2",
+  "version": "10.2.5",
   "main": "index.js",
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1",
     "start:localhost": "expo start --localhost",
     "start:tunnel": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1 -HostMode tunnel",
     "start:clear": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1 -Clear",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "start:lan": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1"
   },
@@ -18,6 +18,7 @@
     "@react-navigation/native": "~7.3.5",
     "date-fns": "^3.6.0",
     "expo": "^54.0.0",
+    "expo-blur": "~15.0.8",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.23",
     "expo-font": "~14.0.12",
@@ -31,9 +32,12 @@
     "papaparse": "^5.4.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-worklets": "0.5.1",
     "xlsx": "^0.18.5",
     "zustand": "^4.5.4"
   },

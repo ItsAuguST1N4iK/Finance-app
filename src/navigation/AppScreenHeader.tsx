@@ -1,62 +1,15 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Animated,
+  View, Text, StyleSheet, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useSettingsNavStore } from '../store/settingsNavSlice';
-
-function CrumbLabel({
-  label,
-  isLast,
-  onPress,
-}: {
-  label: string;
-  isLast: boolean;
-  onPress: () => void;
-}) {
-  const { theme } = useTheme();
-  const press = useRef(new Animated.Value(0)).current;
-  const base = useRef(new Animated.Value(isLast ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(base, {
-      toValue: isLast ? 1 : 0,
-      duration: 160,
-      useNativeDriver: false,
-    }).start();
-  }, [isLast, base]);
-
-  const mix = Animated.add(base, press);
-  const color = mix.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [theme.subtext, theme.accent, theme.accent],
-  });
-
-  return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => {
-        Animated.timing(press, { toValue: 1, duration: 90, useNativeDriver: false }).start();
-      }}
-      onPressOut={() => {
-        Animated.timing(press, { toValue: 0, duration: 140, useNativeDriver: false }).start();
-      }}
-      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-    >
-      <Animated.Text
-        style={[styles.crumbText, { color }, isLast && { fontWeight: '700' }]}
-        numberOfLines={1}
-      >
-        {label}
-      </Animated.Text>
-    </Pressable>
-  );
-}
+import { PressableScale } from '../components/PressableScale';
 
 /**
- * Page header: title OR breadcrumb trail (settings navigator) in the title slot.
- * Progress lives in AppProgressBar at the bottom.
+ * Full-bleed page header (no floating island / side cutouts).
+ * Status area uses the same solid header background as the title row.
  */
 export function AppScreenHeader({ title }: { title?: string }) {
   const { theme } = useTheme();
@@ -68,19 +21,21 @@ export function AppScreenHeader({ title }: { title?: string }) {
   const viewportW = useRef(0);
 
   const showCrumbs = crumbs.length > 0;
+  const multi = crumbs.length > 1;
 
-  const scrollCrumbIntoView = useCallback((id: string) => {
+  const scrollCrumbIntoView = useCallback((id: string, align: 'start' | 'end' = 'end') => {
     const layout = layoutsRef.current[id];
     const scroll = hScrollRef.current;
     if (!layout || !scroll) return;
     const vp = viewportW.current;
-    const pad = 16;
-    // Keep full label visible: align near left with pad; if wider than viewport, show end
-    let x = Math.max(0, layout.x - pad);
-    if (vp > 0 && layout.w + pad * 2 > vp) {
+    const pad = 12;
+    let x: number;
+    if (align === 'start') {
+      x = Math.max(0, layout.x - pad);
+    } else if (vp > 0) {
       x = Math.max(0, layout.x + layout.w + pad - vp);
-    } else if (vp > 0 && layout.x + layout.w + pad > x + vp) {
-      x = Math.max(0, layout.x + layout.w + pad - vp);
+    } else {
+      x = Math.max(0, layout.x - pad);
     }
     scroll.scrollTo({ x, animated: true });
   }, []);
@@ -88,7 +43,7 @@ export function AppScreenHeader({ title }: { title?: string }) {
   useEffect(() => {
     if (!showCrumbs || crumbs.length === 0) return;
     const last = crumbs[crumbs.length - 1]!;
-    const t = setTimeout(() => scrollCrumbIntoView(last.id), 60);
+    const t = setTimeout(() => scrollCrumbIntoView(last.id, 'end'), 50);
     return () => clearTimeout(t);
   }, [crumbs, showCrumbs, scrollCrumbIntoView]);
 
@@ -116,6 +71,7 @@ export function AppScreenHeader({ title }: { title?: string }) {
           >
             {crumbs.map((c, i) => {
               const isLast = i === crumbs.length - 1;
+              const idleColor = !multi || !isLast ? theme.text : theme.accent;
               return (
                 <View
                   key={`${c.id}_${i}`}
@@ -128,14 +84,27 @@ export function AppScreenHeader({ title }: { title?: string }) {
                   {i > 0 && (
                     <Text style={[styles.crumbSep, { color: theme.subtext }]}> › </Text>
                   )}
-                  <CrumbLabel
-                    label={c.label}
-                    isLast={isLast}
+                  <PressableScale
                     onPress={() => {
                       navigateToCrumb(c.id);
-                      setTimeout(() => scrollCrumbIntoView(c.id), 30);
+                      setTimeout(() => scrollCrumbIntoView(c.id, 'start'), 40);
                     }}
-                  />
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    scaleTo={0.96}
+                  >
+                    <Text
+                      style={[
+                        styles.crumbText,
+                        {
+                          color: idleColor,
+                          fontWeight: isLast && multi ? '700' : '600',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {c.label}
+                    </Text>
+                  </PressableScale>
                 </View>
               );
             })}
@@ -152,8 +121,8 @@ export function AppScreenHeader({ title }: { title?: string }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
     zIndex: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleRow: {
     minHeight: 44,
@@ -183,6 +152,5 @@ const styles = StyleSheet.create({
   },
   crumbText: {
     fontSize: 16,
-    fontWeight: '600',
   },
 });

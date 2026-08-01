@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, StyleSheet,
-  TextInput, TouchableOpacity, LayoutAnimation,
-  Platform, UIManager, RefreshControl,
+  TextInput, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { PressableScale } from '../../components/PressableScale';
+import { AppRefreshControl } from '../../components/AppRefreshControl';
 import { useTransactionsStore } from '../../store/transactionsSlice';
 import { useAccountsStore }      from '../../store/accountsSlice';
 import { useTheme } from '../../theme/ThemeContext';
@@ -23,14 +24,12 @@ import type { FilterPlatform } from './types';
 import { FilterBar } from './FilterBar';
 import { FilterModal } from './FilterModal';
 import { refreshAppData } from '../../services/refreshAppData';
+import { ScreenEnter } from '../../components/ScreenEnter';
+import { EmptyState } from '../../components/EmptyState';
 
 type DisplayItem =
   | { kind: 'sep'; label: string; key: string }
   | { kind: 'tx'; data: UnifiedTransaction };
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export function TransactionsScreen() {
   const { theme, cardSurface } = useTheme();
@@ -91,19 +90,16 @@ export function TransactionsScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       loadTransactions(buildFilter());
     }, 350);
     return () => clearTimeout(timer);
   }, [buildFilter]);
 
   function applyFilters() {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     loadTransactions(buildFilter());
   }
 
   function resetFilters() {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSelPlatforms([]); setSelTypes([]); setSelAccountId(null);
     setDateFrom(null); setDateTo(null);
     setSelCurrencies([]); setSelCategories([]);
@@ -151,7 +147,7 @@ export function TransactionsScreen() {
         categoryLabels={categoryLabels}
         accountColor={col}
         accountName={name}
-        onPress={() => setDetailTx(item.data)}
+        onPress={setDetailTx}
       />
     );
   }, [accountMap, categoryLabels, theme.accent]);
@@ -163,6 +159,7 @@ export function TransactionsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
+      <ScreenEnter>
       <View style={styles.topRow}>
         <View style={[styles.searchBox, cardSurface()]}>
           <Ionicons name="search-outline" size={18} color={theme.subtext} />
@@ -174,20 +171,19 @@ export function TransactionsScreen() {
             onChangeText={setSearch}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch('')} activeOpacity={0.75}>
+            <PressableScale onPress={() => setSearch('')}>
               <Ionicons name="close-circle" size={18} color={theme.subtext} />
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
 
-        <TouchableOpacity
+        <PressableScale
           style={[styles.filterBtn, {
             backgroundColor: activeFilters > 0 ? theme.accent : cardSurface().backgroundColor,
             borderColor: theme.border,
             borderWidth: activeFilters > 0 ? 0 : 1,
           }]}
           onPress={() => setFilterVisible(true)}
-          activeOpacity={0.75}
         >
           <Ionicons
             name="options-outline"
@@ -199,7 +195,7 @@ export function TransactionsScreen() {
               <Text style={[styles.filterBadgeText, { color: theme.accent }]}>{activeFilters}</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </PressableScale>
       </View>
 
       <FilterBar
@@ -232,7 +228,7 @@ export function TransactionsScreen() {
         data={displayItems}
         keyExtractor={keyExtractor}
         extraData={`${dataVersion}_${categoryLabels}`}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         onEndReached={() => { if (hasMore) loadMoreTransactions(); }}
         onEndReachedThreshold={0.4}
         renderItem={renderItem}
@@ -241,10 +237,15 @@ export function TransactionsScreen() {
         windowSize={7}
         removeClippedSubviews={Platform.OS === 'android'}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: theme.subtext }]}>{t.txNoResults}</Text>
+          <EmptyState
+            icon="search-outline"
+            title={t.txNoResults}
+            subtitle={t.txNoResultsHint}
+          />
         }
         contentContainerStyle={{ paddingHorizontal: layout.screenPad, paddingBottom: layout.listBottom }}
       />
+      </ScreenEnter>
 
       <FilterModal
         visible={filterVisible}

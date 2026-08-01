@@ -88,7 +88,13 @@ export function isSelfTransfer(
   }
 
   for (const last4 of ctx.last4Digits) {
-    if (new RegExp(`\\*{2,}\\s*${last4}|карт.*${last4}|card.*${last4}`, 'i').test(text)) {
+    // Require masked PAN (**1234) or explicit card + last4 — avoid bare "card … 1234" false positives
+    if (
+      new RegExp(
+        `\\*{2,}\\s*${last4}\\b|\\bкарт(?:ка|ки|ку|ці)?\\s*[#*]*\\s*${last4}\\b|\\bcard\\s*[#*]*\\s*${last4}\\b`,
+        'i',
+      ).test(text)
+    ) {
       return true;
     }
   }

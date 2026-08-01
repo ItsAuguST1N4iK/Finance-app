@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, useWindowDimensions, RefreshControl, Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { PressableScale } from '../../components/PressableScale';
+import { AppRefreshControl } from '../../components/AppRefreshControl';
 import { useAnalyticsStore } from '../../store/analyticsSlice';
 import { formatMonthYearLabel } from '../../utils/chartLabels';
 import { useExchangeRatesStore } from '../../store/exchangeRatesSlice';
@@ -15,7 +17,7 @@ import { DatePickerModal } from '../../components/DatePickerModal';
 import { currencySymbol } from '../../utils/currency';
 import { numberLocale } from '../../utils/locale';
 import { sectionLabelStyle } from '../../theme/commonStyles';
-import { layout, radius, space } from '../../theme/tokens';
+import { layout, radius, space, stroke } from '../../theme/tokens';
 import type { AnalyticsFilters } from '../../types';
 import { storedCategoryKey } from '../../utils/categories';
 import { CategoryRowName } from './CategoryRowName';
@@ -25,8 +27,11 @@ import { PlatformShareBar, PLATFORM_COLORS, type PlatformShareItem } from './Pla
 import { PeriodChip } from './PeriodChip';
 import { IbkrHoldingsSection } from './IbkrHoldingsSection';
 import { CategoryDrillSheet } from './CategoryDrillSheet';
+import { EmptyState } from '../../components/EmptyState';
 import { useCategoryLabel } from '../../hooks/useCategoryLabels';
 import { getCategoryColor } from '../../utils/categoryImpact';
+import { ScreenEnter } from '../../components/ScreenEnter';
+import { AnimatedSwitch } from '../../components/AnimatedSwitch';
 
 type PeriodPreset = NonNullable<AnalyticsFilters['periodPreset']>;
 
@@ -210,10 +215,11 @@ export function AnalyticsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
+      <ScreenEnter>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 140 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+        contentContainerStyle={{ paddingBottom: layout.listBottom + 20 }}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
 
         <ScrollView
@@ -244,20 +250,20 @@ export function AnalyticsScreen() {
 
         {filters.periodPreset === 'custom' && customFrom && customTo && (
           <View style={[styles.customRange, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <TouchableOpacity onPress={() => setDateFromOpen(true)} activeOpacity={0.75}>
+            <PressableScale onPress={() => setDateFromOpen(true)}>
               <Text style={[styles.customDateText, { color: theme.accent, fontWeight: '600' }]}>
                 {customFrom.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
             <Text style={[styles.customDateSep, { color: theme.subtext }]}>→</Text>
-            <TouchableOpacity onPress={() => setDateToOpen(true)} activeOpacity={0.75}>
+            <PressableScale onPress={() => setDateToOpen(true)}>
               <Text style={[styles.customDateText, { color: theme.accent, fontWeight: '600' }]}>
                 {customTo.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={clearCustomFilter} style={styles.clearFilterBtn}>
+            </PressableScale>
+            <PressableScale onPress={clearCustomFilter} style={styles.clearFilterBtn}>
               <Text style={[styles.clearFilterText, { color: theme.expense }]}>{t.analyticsClearFilter}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         )}
 
@@ -266,11 +272,9 @@ export function AnalyticsScreen() {
           <Text style={[styles.noteText, { color: theme.subtext, flex: 1 }]}>
             {t.analyticsIncludeSelfTransfers}
           </Text>
-          <Switch
+          <AnimatedSwitch
             value={!excludeSelf}
             onValueChange={(include) => setFilters({ excludeSelfTransfers: !include })}
-            trackColor={{ false: theme.border, true: theme.accent + '88' }}
-            thumbColor={!excludeSelf ? theme.accent : theme.subtext}
           />
         </View>
 
@@ -320,16 +324,14 @@ export function AnalyticsScreen() {
             {topCategories.map((c, i) => {
               const catColor = getCategoryColor(c.category);
               return (
-                <TouchableOpacity
+                <PressableScale
                   key={c.category}
                   style={[styles.catRow, { borderBottomColor: theme.border }]}
                   onPress={() => setSelectedCategory(c.category)}
-                  activeOpacity={0.7}
                 >
                   <View style={[styles.catRankBubble, { backgroundColor: catColor + '33' }]}>
                     <Text style={[styles.catRank, { color: catColor }]}>#{i + 1}</Text>
                   </View>
-                  <View style={[styles.catColorDot, { backgroundColor: catColor }]} />
                   <View style={{ flex: 1 }}>
                     <CategoryRowName categoryKey={c.category} />
                     <Text style={[styles.catCount, { color: theme.subtext }]}>
@@ -340,19 +342,22 @@ export function AnalyticsScreen() {
                     {c.total.toLocaleString(loc, { maximumFractionDigits: 0 })} {currSym}
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
-                </TouchableOpacity>
+                </PressableScale>
               );
             })}
           </View>
         )}
 
-        {summary.length === 0 && !isLoading && (
-          <View style={styles.emptyState}>
-            <Ionicons name="bar-chart-outline" size={40} color={theme.border} />
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>{t.analyticsNoData}</Text>
-          </View>
-        )}
+        {summary.length === 0 && !isLoading ? (
+          <EmptyState
+            icon="bar-chart-outline"
+            title={t.analyticsNoData}
+            subtitle={t.analyticsNoDataHint}
+            compact
+          />
+        ) : null}
       </ScrollView>
+      </ScreenEnter>
 
       <CategoryDrillSheet
         visible={!!selectedCategory}
@@ -419,7 +424,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: layout.screenPad, marginBottom: space[2.5],
     paddingHorizontal: space[3], paddingVertical: space[2],
-    borderRadius: radius.md, borderWidth: 1, gap: 6,
+    borderRadius: radius.md, borderWidth: stroke.width, gap: 6,
   },
   customDateText: { fontSize: 12 },
   customDateSep: { fontSize: 12 },
@@ -429,12 +434,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginHorizontal: layout.screenPad, marginBottom: space[2.5],
     paddingHorizontal: space[2.5], paddingVertical: 6,
-    borderRadius: radius.sm, borderWidth: 1,
+    borderRadius: radius.sm, borderWidth: stroke.width,
   },
   noteText: { fontSize: 11, flex: 1 },
   catRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space[2.5], borderBottomWidth: 1, gap: space[2] },
   catRankBubble: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  catColorDot: { width: 10, height: 10, borderRadius: 5 },
   catRank: { fontSize: 12, fontWeight: '700' },
   catCount: { fontSize: 12 },
   catTotal: { fontSize: 14, fontWeight: '700' },

@@ -13,6 +13,14 @@ export function isScraperCategoryRule(rule: Pick<CategoryRule, 'id' | 'name' | '
     || rule.name.startsWith('Auto · ');
 }
 
+/** App-seeded rules (scrapers + essential IBKR), not user-created. */
+export function isAppCreatedCategoryRule(rule: Pick<CategoryRule, 'id' | 'name' | 'priority'>): boolean {
+  if (isScraperCategoryRule(rule)) return true;
+  if (rule.name === 'IBKR BUY' || rule.name === 'IBKR SELL') return true;
+  if (rule.name.startsWith('IBKR ')) return true;
+  return false;
+}
+
 type ScraperDef = {
   slug: string;
   nameUk: string;
@@ -233,10 +241,52 @@ function scraperId(slug: string): string {
   return `${SCRAPER_RULE_ID_PREFIX}${slug}`;
 }
 
+const SCRAPER_NAME_EN: Record<string, string> = {
+  cancel: 'Auto · Cancellation',
+  dividend: 'Auto · Dividends',
+  fee: 'Auto · Fees',
+  forex: 'Auto · FX',
+  buy: 'Auto · BUY (investments)',
+  from_p2p: 'Auto · From: (incoming)',
+  top_up: 'Auto · Top-up / salary',
+  food_shops: 'Auto · Groceries',
+  subscriptions: 'Auto · Subscriptions',
+  games: 'Auto · Games / Steam',
+  restaurants: 'Auto · Cafés / cinema',
+  electronics: 'Auto · Electronics',
+  transport: 'Auto · Transport',
+  health: 'Auto · Health',
+  p2p_transfer: 'Auto · P2P transfer',
+  mcc_entertainment: 'Auto · MCC entertainment',
+  mcc_food: 'Auto · MCC food',
+  mcc_health: 'Auto · MCC health',
+  mcc_clothing: 'Auto · MCC clothing',
+  mcc_utilities: 'Auto · MCC utilities',
+  mcc_transport: 'Auto · MCC transport',
+  mcc_subscriptions: 'Auto · MCC subscriptions',
+  mcc_electronics: 'Auto · MCC electronics',
+  mcc_transfer: 'Auto · MCC transfers',
+  mcc_top_up: 'Auto · MCC top-up',
+};
+
+/** Localized display name for scraper rules; keeps user renames. */
+export function scraperRuleDisplayName(
+  rule: Pick<CategoryRule, 'id' | 'name'>,
+  language: 'uk' | 'en',
+): string {
+  if (!rule.id.startsWith(SCRAPER_RULE_ID_PREFIX)) return rule.name;
+  const slug = rule.id.slice(SCRAPER_RULE_ID_PREFIX.length);
+  const def = SCRAPER_CATEGORY_DEFS.find((d) => d.slug === slug);
+  if (!def) return rule.name;
+  const en = SCRAPER_NAME_EN[slug];
+  if (rule.name !== def.nameUk && rule.name !== en) return rule.name;
+  return language === 'en' ? (en ?? rule.name.replace(/^Авто · /, 'Auto · ')) : def.nameUk;
+}
+
 /**
  * Upsert built-in scraper heuristics into category_rules at priority 0.
- * Preserves user `enabled` if the rule already exists (so they can turn one off).
- * Runs fully at most once per app session unless `force` is set.
+ * Preserves user `enabled` and custom `name` if the rule already exists.
+ * Match fields are refreshed from code defs so pattern updates reach existing installs.
  */
 let scrapersEnsured = false;
 
@@ -282,8 +332,18 @@ export function ensureScraperCategoryRules(force = false): void {
           def.matchField, def.matchOp, def.matchValue, now,
         ],
       );
+    } else {
+      // Refresh match fields from code defs; keep enabled + name (user may have renamed)
+      db.runSync(
+        `UPDATE category_rules
+         SET category_key = ?, priority = ?, match_field = ?, match_op = ?, match_value = ?
+         WHERE id = ?`,
+        [
+          def.categoryKey, SCRAPER_RULE_PRIORITY,
+          def.matchField, def.matchOp, def.matchValue, id,
+        ],
+      );
     }
-    // Existing rules (incl. user-edited) are left untouched
   }
 
   scrapersEnsured = true;

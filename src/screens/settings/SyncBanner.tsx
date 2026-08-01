@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { SyncProgress } from '../../api/monobank';
+import { radius, space, stroke } from '../../theme/tokens';
 
 export function SyncBanner({ progress }: { progress: SyncProgress | null }) {
   const { theme } = useTheme();
@@ -31,7 +32,7 @@ export function SyncBanner({ progress }: { progress: SyncProgress | null }) {
 }
 
 const bnS = StyleSheet.create({
-  wrap: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 12 },
+  wrap: { borderRadius: radius.md, borderWidth: stroke.width, padding: space[3], marginBottom: space[3] },
   row:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   step: { flex: 1, fontSize: 13 },
   pct:  { fontSize: 13, fontWeight: '700' },

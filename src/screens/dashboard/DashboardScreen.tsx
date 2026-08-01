@@ -1,8 +1,9 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl,
-  TouchableOpacity, FlatList,
+  View, Text, ScrollView, StyleSheet,
 } from 'react-native';
+import { PressableScale } from '../../components/PressableScale';
+import { AppRefreshControl } from '../../components/AppRefreshControl';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,17 +19,19 @@ import { AccountCard, ACCOUNT_CARD_SNAP, ACCOUNT_CARD_WIDTH } from '../../compon
 import { AddAccountModal } from '../../components/AddAccountModal';
 import { DateSeparator } from '../../components/DateSeparator';
 import { TxDetailModal } from '../../components/TxDetailModal';
+import { EmptyState } from '../../components/EmptyState';
 import { useCategoryLabels } from '../../hooks/useCategoryLabels';
 import type { Account, UnifiedTransaction } from '../../types';
 import { currencySymbol } from '../../utils/currency';
-import { convertToHomeCurrency } from '../../utils/currencyConvert';
+import { tryConvertToHomeCurrency } from '../../utils/currencyConvert';
 import { dateFnsLocale, numberLocale } from '../../utils/locale';
 import { sectionLabelStyle } from '../../theme/commonStyles';
-import { layout, radius, space, type } from '../../theme/tokens';
+import { layout, radius, space, stroke, type } from '../../theme/tokens';
 import { format } from 'date-fns';
 import { CardEditModal } from '../../components/CardEditModal';
 import { ExchangeRatesWidget } from './ExchangeRatesWidget';
 import { PlannerAlert } from './PlannerAlert';
+import { ScreenEnter } from '../../components/ScreenEnter';
 
 // ─── Main Screen ──────────────────────────────────────
 
@@ -59,7 +62,9 @@ export function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       loadRecentTransactions();
-    }, []),
+      loadHomeCurrency();
+      void fetchRates();
+    }, [loadRecentTransactions, loadHomeCurrency, fetchRates]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -76,7 +81,10 @@ export function DashboardScreen() {
 
   const totalBalance = visibleAccounts.reduce((sum, a) => {
     if (a.balance == null) return sum;
-    return sum + convertToHomeCurrency(a.balance, a.currency, homeCurrency, rates);
+    const converted = tryConvertToHomeCurrency(a.balance, a.currency, homeCurrency, rates);
+    // Skip accounts we cannot convert — never treat UAH as USD/etc.
+    if (converted == null) return sum;
+    return sum + converted;
   }, 0);
   const balanceSym = currencySymbol(homeCurrency);
 
@@ -88,9 +96,10 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['bottom']}>
+      <ScreenEnter>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Balance */}
         <View style={styles.balanceSection}>
@@ -106,32 +115,30 @@ export function DashboardScreen() {
         {/* Accounts */}
         <View style={styles.section}>
           <Text style={sectionLabelStyle(theme.subtext)}>{t.dashAccounts}</Text>
-          <FlatList
+          <ScrollView
             horizontal
-            data={visibleAccounts}
-            keyExtractor={(a) => a.id}
             showsHorizontalScrollIndicator={false}
             style={styles.accountsScroll}
             contentContainerStyle={styles.accountsListContent}
             snapToInterval={ACCOUNT_CARD_SNAP}
             decelerationRate="fast"
-            renderItem={({ item }) => (
+          >
+            {visibleAccounts.map((item) => (
               <AccountCard
+                key={item.id}
                 account={item}
                 onEdit={() => setEditAccount(item)}
               />
-            )}
-            ListFooterComponent={(
-              <TouchableOpacity
-                style={[styles.addCardBtn, cardSurface(), { borderColor: theme.accent + '55', width: ACCOUNT_CARD_WIDTH }]}
-                onPress={() => setShowAddAccount(true)}
-                activeOpacity={0.75}
-              >
-                <Ionicons name="add-circle-outline" size={28} color={theme.accent} />
-                <Text style={[styles.addCardText, { color: theme.accent }]}>{t.settingsAddAccount}</Text>
-              </TouchableOpacity>
-            )}
-          />
+            ))}
+            <PressableScale
+              style={[styles.addCardBtn, cardSurface(), { borderColor: theme.accent + '55', width: ACCOUNT_CARD_WIDTH }]}
+              onPress={() => setShowAddAccount(true)}
+              feedback="opacity"
+            >
+              <Ionicons name="add-circle-outline" size={28} color={theme.accent} />
+              <Text style={[styles.addCardText, { color: theme.accent }]}>{t.settingsAddAccount}</Text>
+            </PressableScale>
+          </ScrollView>
         </View>
 
         {/* Exchange rates */}
@@ -149,10 +156,15 @@ export function DashboardScreen() {
         )}
 
         {/* Recent txs */}
-        <View style={[styles.section, { paddingBottom: 100 }]}>
+        <View style={[styles.section, { paddingBottom: layout.listBottom }]}>
           <Text style={sectionLabelStyle(theme.subtext)}>{t.dashRecentTx}</Text>
           {recentTransactions.length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.subtext }]}>{t.dashNoTx}</Text>
+            <EmptyState
+              icon="receipt-outline"
+              title={t.dashNoTx}
+              subtitle={t.dashNoTxHint}
+              compact
+            />
           ) : (
             recentTransactions.map((tx, idx) => {
               const acc = accountMap.get(tx.accountId);
@@ -168,7 +180,7 @@ export function DashboardScreen() {
                     categoryLabels={categoryLabels}
                     accountColor={acc?.color ?? theme.accent}
                     accountName={acc ? (acc.displayName ?? acc.name) : tx.platform}
-                    onPress={() => setDetailTx(tx)}
+                    onPress={setDetailTx}
                   />
                 </React.Fragment>
               );
@@ -176,6 +188,7 @@ export function DashboardScreen() {
           )}
         </View>
       </ScrollView>
+      </ScreenEnter>
 
       <TxDetailModal
         item={detailTx}
@@ -193,17 +206,16 @@ export function DashboardScreen() {
       />
 
       {/* Card Edit Modal */}
-      {editAccount && (
-        <CardEditModal
-          account={editAccount}
-          visible={!!editAccount}
-          onClose={() => setEditAccount(null)}
-          onSave={(name, color) => {
-            updateDisplay(editAccount.id, name, color);
-            setEditAccount(null);
-          }}
-        />
-      )}
+      <CardEditModal
+        account={editAccount}
+        visible={!!editAccount}
+        onClose={() => setEditAccount(null)}
+        onSave={(name, color) => {
+          if (!editAccount) return;
+          updateDisplay(editAccount.id, name, color);
+          setEditAccount(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -222,7 +234,7 @@ const styles = StyleSheet.create({
   addCardBtn: {
     height: 88,
     borderRadius: radius.lg,
-    borderWidth: 1.5,
+    borderWidth: stroke.width,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',

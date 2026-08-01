@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -7,6 +7,7 @@ import { TOKEN_KEYS } from '../../security/tokenStore';
 import type { Account } from '../../types';
 import type { MonoCsvCurrencyMode } from '../../api/monobank-csv';
 import type { SyncProgress } from '../../api/monobank';
+import { PressableScale } from '../../components/PressableScale';
 import { Section, GroupLabel } from './Section';
 import { TokenBlock } from './TokenBlock';
 import { CsvImportBlock } from './CsvImportBlock';
@@ -59,14 +60,14 @@ export function PlatformsSection({
           </View>
         </View>
         <GroupLabel label={t.settingsMonoApiSync} />
-        <TouchableOpacity
+        <PressableScale
           style={[s.syncBtn, syncing && { opacity: 0.6 }]}
           onPress={syncMonobank}
           disabled={syncing}
         >
           <Ionicons name="sync-outline" size={18} color={theme.onAccent} />
           <Text style={s.syncBtnText}>{syncing ? t.settingsSyncing : t.settingsSyncMono}</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <TokenBlock
           title="Monobank X-Token"
           tokenKey={TOKEN_KEYS.monobank}
@@ -115,14 +116,14 @@ export function PlatformsSection({
           </Text>
         </View>
         <GroupLabel label="Flex Web Service" />
-        <TouchableOpacity
+        <PressableScale
           style={[s.syncBtn, syncing && { opacity: 0.6 }]}
           onPress={syncIBKR}
           disabled={syncing}
         >
           <Ionicons name="sync-outline" size={18} color={theme.onAccent} />
           <Text style={s.syncBtnText}>{syncing ? t.settingsSyncing : t.settingsSyncIbkr}</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <TokenBlock
           title="IBKR Flex Token"
           tokenKey={TOKEN_KEYS.ibkrFlexToken}

@@ -1,12 +1,25 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, TouchableOpacity, StyleSheet, Animated, Dimensions, Text,
+  View, StyleSheet, Text, useWindowDimensions, Pressable,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { fpsEasing, speedMs } from '../theme/fps60';
+import { radius, stroke } from '../theme/tokens';
+import {
+  loadShowTabLabels,
+  subscribeShowTabLabels,
+} from '../security/uiPrefs';
 import type { RootTabParamList } from './AppNavigator';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -22,14 +35,133 @@ const TAB_ICONS: Record<
   Settings:     { icon: 'settings-sharp', iconOff: 'settings-outline' },
 };
 
-const ISLAND_WIDTH  = Dimensions.get('window').width - 32;
-const TAB_COUNT     = 5;
-const TAB_W         = ISLAND_WIDTH / TAB_COUNT;
+/** Island height with labels (sheet clearance / progress bar). */
+export const TAB_ISLAND_HEIGHT = 58;
+export const TAB_ISLAND_HEIGHT_COMPACT = 48;
+export const TAB_BAR_GAP = 8;
 
-export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const { theme, animationSpeed, cardSurface } = useTheme();
-  const { t }     = useLanguage();
-  const insets    = useSafeAreaInsets();
+const GLOW_SIZE = 38;
+
+const rollSpring = (speed: number) => ({
+  damping: 18,
+  stiffness: Math.round(220 * Math.max(0.5, Math.min(2, speed || 1))),
+  mass: 0.85,
+  overshootClamping: false,
+});
+
+function TabItem({
+  focused,
+  icon,
+  iconOff,
+  label,
+  showLabel,
+  color,
+  labelColor,
+  onPress,
+}: {
+  focused: boolean;
+  icon: IconName;
+  iconOff: IconName;
+  label: string;
+  showLabel: boolean;
+  color: string;
+  labelColor: string;
+  onPress: () => void;
+}) {
+  const { animationSpeed } = useTheme();
+  const scale = useSharedValue(focused ? 1.08 : 1);
+  const lift = useSharedValue(0);
+
+  useEffect(() => {
+    const up = speedMs(90, animationSpeed);
+    const down = speedMs(150, animationSpeed);
+    if (focused) {
+      lift.value = withSequence(
+        withTiming(-4, { duration: up, easing: fpsEasing.out }),
+        withTiming(0, { duration: down, easing: fpsEasing.out }),
+      );
+      scale.value = withSequence(
+        withTiming(1.2, { duration: up, easing: fpsEasing.out }),
+        withTiming(1.08, { duration: down, easing: fpsEasing.out }),
+      );
+    } else {
+      lift.value = withTiming(0, { duration: down, easing: fpsEasing.out });
+      scale.value = withTiming(1, { duration: down, easing: fpsEasing.out });
+    }
+  }, [focused, animationSpeed, lift, scale]);
+
+  const iconWrapStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: lift.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <Pressable
+      style={styles.tab}
+      onPress={onPress}
+      hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
+      accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={label}
+    >
+      <Animated.View style={[styles.iconWrap, iconWrapStyle]}>
+        <Ionicons name={focused ? icon : iconOff} size={22} color={color} />
+      </Animated.View>
+      {showLabel ? (
+        <Text
+          style={[styles.tabLabel, { color: labelColor }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
+          {label}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+export function IslandTabBar({ state, navigation }: BottomTabBarProps) {
+  const { theme, animationSpeed } = useTheme();
+  const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const islandWidth = windowWidth - 32;
+  const tabCount = Math.max(1, state.routes.length);
+  const tabW = islandWidth / tabCount;
+  const [showLabels, setShowLabels] = useState(true);
+
+  // Single rolling circle — slides across tabs (not a static per-tab disc)
+  const indicatorX = useSharedValue(
+    state.index * tabW + (tabW - GLOW_SIZE) / 2,
+  );
+  const prevTabW = React.useRef(tabW);
+  const ready = React.useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    void loadShowTabLabels().then((v) => {
+      if (alive) setShowLabels(v);
+    });
+    return subscribeShowTabLabels(setShowLabels);
+  }, []);
+
+  useEffect(() => {
+    const target = state.index * tabW + (tabW - GLOW_SIZE) / 2;
+    if (!ready.current || prevTabW.current !== tabW) {
+      prevTabW.current = tabW;
+      indicatorX.value = target;
+      ready.current = true;
+      return;
+    }
+    indicatorX.value = withSpring(target, rollSpring(animationSpeed));
+  }, [state.index, tabW, animationSpeed, indicatorX]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value }],
+  }));
 
   const TAB_LABELS: Record<keyof RootTabParamList, string> = {
     Dashboard:    t.tabDashboard,
@@ -39,42 +171,44 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
     Settings:     t.tabSettings,
   };
 
-  const indicatorX  = useRef(new Animated.Value(state.index * TAB_W)).current;
-  const indicatorOff = useRef(new Animated.Value(8)).current;
-
-  useEffect(() => {
-    Animated.spring(indicatorX, {
-      toValue:       state.index * TAB_W,
-      useNativeDriver: true,
-      stiffness:     200 * animationSpeed,
-      damping:       28,
-      mass:          1,
-    }).start();
-  }, [state.index, animationSpeed]);
+  const islandH = showLabels ? TAB_ISLAND_HEIGHT : TAB_ISLAND_HEIGHT_COMPACT;
+  // Circle sits behind icons; labels stay tight under icons
+  const indicatorTop = showLabels ? 4 : (islandH - GLOW_SIZE) / 2;
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: insets.bottom + 8 }]} pointerEvents="box-none">
-      <View style={[styles.island, cardSurface(true), { shadowColor: theme.shadow }]}>
-        {/* Animated slider pill */}
+    <View
+      style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) + TAB_BAR_GAP }]}
+      pointerEvents="box-none"
+    >
+      <View style={[styles.island, {
+        width: islandWidth,
+        height: islandH,
+        backgroundColor: theme.card,
+        borderColor: theme.border,
+      }]}>
         <Animated.View
+          pointerEvents="none"
           style={[
-            styles.indicator,
-            { backgroundColor: theme.accent + '28', width: TAB_W - 16 },
-            { transform: [{ translateX: Animated.add(indicatorX, indicatorOff) }] },
+            styles.rollingGlow,
+            {
+              top: indicatorTop,
+              backgroundColor: theme.accent,
+            },
+            indicatorStyle,
           ]}
         />
 
         {state.routes.map((route, index) => {
-          const focused  = state.index === index;
-          const icons    = TAB_ICONS[route.name as keyof RootTabParamList];
-          const label    = TAB_LABELS[route.name as keyof RootTabParamList];
-          const opts     = descriptors[route.key].options;
-          const color    = focused ? theme.accent : theme.subtext;
+          const focused = state.index === index;
+          const icons = TAB_ICONS[route.name as keyof RootTabParamList];
+          const label = TAB_LABELS[route.name as keyof RootTabParamList];
+          const iconColor = focused ? theme.onAccent : theme.subtext;
+          const labelColor = focused ? theme.accent : theme.subtext;
 
           function onPress() {
             const event = navigation.emit({
-              type:     'tabPress',
-              target:   route.key,
+              type: 'tabPress',
+              target: route.key,
               canPreventDefault: true,
             });
             if (!focused && !event.defaultPrevented) {
@@ -83,29 +217,17 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
           }
 
           return (
-            <TouchableOpacity
+            <TabItem
               key={route.key}
-              style={styles.tab}
+              focused={focused}
+              icon={icons.icon}
+              iconOff={icons.iconOff}
+              label={label}
+              showLabel={showLabels}
+              color={iconColor}
+              labelColor={labelColor}
               onPress={onPress}
-              activeOpacity={0.7}
-              hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
-            >
-              <Animated.View style={styles.tabInner}>
-                <Ionicons
-                  name={focused ? icons.icon : icons.iconOff}
-                  size={22}
-                  color={color}
-                />
-                <Text
-                  style={[styles.tabLabel, { color }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.65}
-                >
-                  {label}
-                </Text>
-              </Animated.View>
-            </TouchableOpacity>
+            />
           );
         })}
       </View>
@@ -116,41 +238,48 @@ export function IslandTabBar({ state, descriptors, navigation }: BottomTabBarPro
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    bottom:   0,
-    left:     0,
-    right:    0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
   },
   island: {
-    width:         ISLAND_WIDTH,
-    height:        62,
-    borderRadius:  28,
+    borderRadius: radius.fab,
     flexDirection: 'row',
-    overflow:      'hidden',
-    shadowOpacity: 0.35,
-    shadowRadius:  20,
-    shadowOffset:  { width: 0, height: 8 },
-    elevation:     16,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: stroke.width,
   },
-  indicator: {
-    position:     'absolute',
-    top:          6,
-    bottom:       6,
-    borderRadius: 20,
+  rollingGlow: {
+    position: 'absolute',
+    left: 0,
+    width: GLOW_SIZE,
+    height: GLOW_SIZE,
+    borderRadius: GLOW_SIZE / 2,
+    opacity: 0.92,
   },
   tab: {
-    flex:            1,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  tabInner: {
-    alignItems:     'center',
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap:            2,
+    gap: 0,
+    paddingBottom: 1,
+    zIndex: 1,
+  },
+  iconWrap: {
+    width: 40,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
-    fontSize:   9,
+    fontSize: 9,
     fontWeight: '600',
-    letterSpacing: 0.3,
+    letterSpacing: 0.15,
+    maxWidth: '96%',
+    textAlign: 'center',
+    marginTop: -1,
+    lineHeight: 11,
   },
 });

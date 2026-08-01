@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { format } from 'date-fns';
 import { BottomSheetModal } from '../../components/BottomSheetModal';
 import { TxDetailModal } from '../../components/TxDetailModal';
@@ -9,13 +9,12 @@ import { useAccountsStore } from '../../store/accountsSlice';
 import { mapDbRowToTransaction } from '../../store/transactionsSlice';
 import { getDatabase } from '../../db/migrations';
 import { currencySymbol } from '../../utils/currency';
-import { convertToHomeCurrency } from '../../utils/currencyConvert';
+import { tryConvertToHomeCurrency } from '../../utils/currencyConvert';
 import { dateFnsLocale, numberLocale } from '../../utils/locale';
 import { useExchangeRatesStore } from '../../store/exchangeRatesSlice';
 import type { AnalyticsRawTx } from '../../utils/analyticsCompute';
 import type { UnifiedTransaction } from '../../types';
-import { PLATFORM_COLORS, type PlatformShareItem } from './PlatformShareBar';
-import { SharePie } from './SharePie';
+import { PLATFORM_COLORS, PlatformShareBar, type PlatformShareItem } from './PlatformShareBar';
 
 interface Props {
   visible: boolean;
@@ -42,7 +41,8 @@ export function CategoryDrillSheet({
     if (!categoryKey || txs.length === 0) return [];
     const map = new Map<string, { accountId: string; accountName: string; total: number; color: string }>();
     for (const tx of txs) {
-      const converted = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+      const converted = tryConvertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+      if (converted == null) continue;
       const acc = accounts.find((a) => a.id === tx.account_id);
       const existing = map.get(tx.account_id);
       if (existing) {
@@ -86,21 +86,25 @@ export function CategoryDrillSheet({
         title={categoryLabel}
         subtitle={t.analyticsCategoryTx}
         scroll
-        maxHeight="88%"
       >
         {shareItems.length > 0 && (
-          <SharePie title={t.analyticsCategoryShare} items={shareItems} />
+          <PlatformShareBar title={t.analyticsCategoryShare} items={shareItems} />
         )}
 
         {txs.slice(0, 100).map((tx, i) => {
           const acc = accounts.find((a) => a.id === tx.account_id);
-          const amt = convertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+          const amt = tryConvertToHomeCurrency(Math.abs(tx.amount), tx.currency, homeCurrency, rates);
+          const amountLabel = amt != null
+            ? `${fmt(amt)} ${currSym}`
+            : `${fmt(Math.abs(tx.amount))} ${currencySymbol(tx.currency)}`;
           return (
-            <TouchableOpacity
+            <Pressable
               key={`${tx.id}-${i}`}
-              style={[styles.txRow, { borderBottomColor: theme.border }]}
+              style={({ pressed }) => [
+                styles.txRow,
+                { borderBottomColor: theme.border, opacity: pressed ? 0.72 : 1 },
+              ]}
               onPress={() => openDetail(tx.id)}
-              activeOpacity={0.7}
             >
               <View style={{ flex: 1 }}>
                 <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
@@ -113,9 +117,9 @@ export function CategoryDrillSheet({
                 </Text>
               </View>
               <Text style={{ color: theme.expense, fontWeight: '700', fontSize: 13 }}>
-                {fmt(amt)} {currSym}
+                {amountLabel}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </BottomSheetModal>

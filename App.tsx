@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ActivityIndicator, InteractionManager,
+} from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -7,12 +10,19 @@ import { StatusBar } from 'expo-status-bar';
 import { runMigrations } from './src/db/migrations';
 import { AppNavigator }  from './src/navigation/AppNavigator';
 import { usePlannedIncomeStore } from './src/store/plannedIncomeSlice';
-import { ThemeProvider }    from './src/theme/ThemeContext';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { LanguageProvider } from './src/i18n/LanguageContext';
+import { BiometricGate } from './src/components/BiometricGate';
 import { repairCurrencyMismatches } from './src/utils/repairCurrency';
 import { ensureEssentialCategoryRules } from './src/utils/categoryRules';
 import { refreshCustomCategoryCache } from './src/utils/categoryImpact';
 import { refreshAccountBalancesFromTransactions } from './src/utils/accountBalance';
+
+
+function ThemedStatusBar() {
+  const { themeKey } = useTheme();
+  return <StatusBar style={themeKey === 'light' ? 'dark' : 'light'} translucent />;
+}
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -25,14 +35,20 @@ export default function App() {
         await runMigrations();
         ensureEssentialCategoryRules();
         refreshCustomCategoryCache();
-        const repaired = repairCurrencyMismatches();
-        if (repaired.monoCsvFixed || repaired.selfTransferTyped) {
-          console.log('[App] data repair:', repaired);
-        }
-        // One forced recompute during splash — avoids double refresh after first loadAccounts
-        refreshAccountBalancesFromTransactions(true);
-        checkOverdue();
+        // Show UI ASAP — heavy repair/balance work runs after first paint
         setReady(true);
+        InteractionManager.runAfterInteractions(() => {
+          try {
+            const repaired = repairCurrencyMismatches();
+            if (repaired.monoCsvFixed || repaired.selfTransferTyped) {
+              console.log('[App] data repair:', repaired);
+            }
+            refreshAccountBalancesFromTransactions(true);
+            checkOverdue();
+          } catch (e) {
+            console.warn('[App] deferred init:', e);
+          }
+        });
       } catch (e) {
         console.error('[App] init error:', e);
         setError(String(e));
@@ -60,20 +76,25 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <SafeAreaProvider>
-          <NavigationContainer>
-            <StatusBar style="auto" />
-            <AppNavigator />
-          </NavigationContainer>
-        </SafeAreaProvider>
-      </LanguageProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <ThemeProvider>
+        <LanguageProvider>
+          <SafeAreaProvider>
+            <NavigationContainer>
+              <ThemedStatusBar />
+              <BiometricGate>
+                <AppNavigator />
+              </BiometricGate>
+            </NavigationContainer>
+          </SafeAreaProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   loadingScreen: {
     flex: 1,
     backgroundColor: '#0f172a',

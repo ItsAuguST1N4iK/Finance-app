@@ -85,8 +85,9 @@ export function SettingSlider({ value, min, max, step, onChange, format }: Props
     Animated.spring(thumbLeftAnim, {
       toValue: thumbLeftForValue(snapped),
       useNativeDriver: false,
-      friction: 9,
-      tension: 120,
+      damping: 20,
+      stiffness: 260,
+      mass: 0.8,
     }).start();
   }
 
