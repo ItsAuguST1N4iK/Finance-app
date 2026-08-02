@@ -32,14 +32,19 @@ export function BiometricGate({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const hw = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = hw ? await LocalAuthentication.isEnrolledAsync() : false;
-      if (!hw || !enrolled) {
+      if (!hw) {
+        // No biometric sensor on this device at all — the lock was never
+        // enforceable here, so there is nothing to fail closed against.
         unlockedRef.current = true;
         setUnlocked(true);
         setBusy(false);
         return;
       }
 
+      // Do NOT bypass when biometrics are simply unenrolled (e.g. the user
+      // removed their fingerprints in OS settings after enabling app-lock):
+      // fail closed and let authenticateAsync attempt the device-passcode
+      // fallback, or surface an explicit error otherwise.
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: t.biometricPrompt,
         cancelLabel: t.cancel,

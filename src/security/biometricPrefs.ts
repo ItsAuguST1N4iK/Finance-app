@@ -24,12 +24,8 @@ export async function loadBiometricEnabled(): Promise<boolean> {
 }
 
 export async function saveBiometricEnabled(enabled: boolean): Promise<void> {
-  try {
-    await SecureStore.setItemAsync(KEY, enabled ? '1' : '0', {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
-  } catch {
-    // still notify so UI / gate stay in sync for this session
-  }
+  await SecureStore.setItemAsync(KEY, enabled ? '1' : '0', {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
   notify(enabled);
 }

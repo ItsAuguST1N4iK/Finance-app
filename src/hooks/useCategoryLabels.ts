@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { CategoryKey } from '../utils/categoryRegistry';
 import { CATEGORY_I18N_KEY, ALL_CATEGORY_KEYS } from '../utils/categoryRegistry';
@@ -7,14 +7,21 @@ import {
   getCustomCategoryName,
   loadCustomCategories,
   refreshCustomCategoryCache,
+  subscribeCategoryChanges,
+  getCategoryVersion,
 } from '../utils/categoryImpact';
 
 function categoryI18n(t: Translations, i18nKey: string): string {
   return (t as unknown as Record<string, string>)[i18nKey] ?? i18nKey;
 }
 
+function useCategoryVersion(): number {
+  return useSyncExternalStore(subscribeCategoryChanges, getCategoryVersion, getCategoryVersion);
+}
+
 export function useCategoryLabels(): Record<string, string> {
   const { t } = useLanguage();
+  const version = useCategoryVersion();
   return useMemo(() => {
     refreshCustomCategoryCache();
     const out: Record<string, string> = {};
@@ -25,7 +32,8 @@ export function useCategoryLabels(): Record<string, string> {
       out[c.key] = c.name;
     }
     return out;
-  }, [t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, version]);
 }
 
 export function useCategoryLabel(key: CategoryKey | string | null | undefined): string {

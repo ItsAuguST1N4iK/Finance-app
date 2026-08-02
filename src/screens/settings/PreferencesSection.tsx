@@ -81,7 +81,12 @@ export function PreferencesSection({
       if (!result.success) return;
     }
     setBiometricOn(next);
-    await saveBiometricEnabled(next);
+    try {
+      await saveBiometricEnabled(next);
+    } catch {
+      setBiometricOn(!next);
+      Alert.alert(t.error, t.biometricSaveFailed);
+    }
   }
 
   return (

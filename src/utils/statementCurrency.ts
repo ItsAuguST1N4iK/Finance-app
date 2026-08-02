@@ -2,7 +2,9 @@
  * Infer statement currency from file name / Monobank CSV header / IBKR content.
  */
 
-const ISO = new Set(['UAH', 'USD', 'EUR', 'GBP', 'CHF', 'PLN', 'CZK', 'CAD', 'JPY']);
+import { ALL_CURRENCIES } from '../constants/currencies';
+
+const ISO = new Set(ALL_CURRENCIES);
 
 export function detectCurrencyFromFileName(name: string): string | null {
   const n = (name || '').toLowerCase();
@@ -12,6 +14,7 @@ export function detectCurrencyFromFileName(name: string): string | null {
   if (/\bgbp\b|фунт|pound/.test(n)) return 'GBP';
   if (/\bchf\b|франк/.test(n)) return 'CHF';
   if (/\bpln\b|злоти/.test(n)) return 'PLN';
+  if (/\baud\b|австрал/.test(n)) return 'AUD';
   return null;
 }
 
@@ -49,7 +52,7 @@ export function peekIbkrStatementCurrency(fileName: string, csvContent: string):
   const fromName = detectCurrencyFromFileName(fileName);
   if (fromName) return fromName;
 
-  const m = csvContent.match(/"(USD|EUR|GBP|UAH|CHF)"/);
+  const m = csvContent.match(/"(USD|EUR|GBP|UAH|CHF|PLN|CZK|CAD|AUD|JPY)"/);
   if (m) return m[1];
   return 'USD';
 }

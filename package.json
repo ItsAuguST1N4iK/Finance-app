@@ -1,6 +1,6 @@
 {
   "name": "finance-control",
-  "version": "10.2.6",
+  "version": "10.2.7",
   "main": "index.js",
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File ./start-expo.ps1",

@@ -16,13 +16,15 @@ export async function refreshAppData(scope: RefreshScope = 'all'): Promise<void>
     loadRecentTransactions();
   }
 
+  if (scope === 'all') {
+    useAccountsStore.getState().loadAccounts();
+    // Must resolve before compute() reads rates below, or the analytics
+    // totals get computed against stale/empty exchange rates.
+    await useExchangeRatesStore.getState().fetchRates();
+  }
+
   if (scope === 'all' || scope === 'analytics') {
     useAnalyticsStore.getState().loadHomeCurrency();
     useAnalyticsStore.getState().compute();
-  }
-
-  if (scope === 'all') {
-    useAccountsStore.getState().loadAccounts();
-    await useExchangeRatesStore.getState().fetchRates();
   }
 }

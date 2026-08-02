@@ -68,7 +68,7 @@ export function TransactionsScreen() {
     accountId:   selAccountId ?? undefined,
     searchText:  search || undefined,
     dateFrom:    dateFrom ? dateFrom.getTime() : undefined,
-    dateTo:      dateTo   ? dateTo.getTime()   : undefined,
+    dateTo:      dateTo   ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23, 59, 59, 999).getTime() : undefined,
     currencies:  selCurrencies.length > 0 ? selCurrencies : undefined,
     tags:        selCategories.length > 0 ? selCategories : undefined,
   }), [search, selPlatforms, selTypes, selAccountId, dateFrom, dateTo, selCurrencies, selCategories]);

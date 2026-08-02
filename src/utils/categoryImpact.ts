@@ -113,12 +113,14 @@ export function saveCustomCategory(input: {
     [id, key, input.name.trim(), input.color, input.impact, createdAt],
   );
   refreshCustomCategoryCache();
+  notifyCategoryChange();
   return id!;
 }
 
 export function deleteCustomCategory(id: string): void {
   getDatabase().runSync('DELETE FROM custom_categories WHERE id = ?', [id]);
   refreshCustomCategoryCache();
+  notifyCategoryChange();
 }
 
 export function deleteCategoryByKey(key: string): void {
@@ -127,6 +129,7 @@ export function deleteCategoryByKey(key: string): void {
     hideBuiltinCategory(key);
   }
   refreshCustomCategoryCache();
+  notifyCategoryChange();
 }
 
 export function hideBuiltinCategory(key: string): void {
@@ -136,12 +139,14 @@ export function hideBuiltinCategory(key: string): void {
       [key],
     );
   } catch { /* table may not exist yet */ }
+  notifyCategoryChange();
 }
 
 export function unhideBuiltinCategory(key: string): void {
   try {
     getDatabase().runSync('DELETE FROM hidden_categories WHERE key = ?', [key]);
   } catch { /* ignore */ }
+  notifyCategoryChange();
 }
 
 export function loadHiddenCategoryKeys(): Set<string> {
@@ -167,6 +172,26 @@ const customImpactCache = new Map<string, CategoryImpact>();
 const customColorCache = new Map<string, string>();
 const customNameCache = new Map<string, string>();
 let hiddenKeysCache: Set<string> | null = null;
+
+type CategoryChangeListener = () => void;
+const categoryChangeListeners = new Set<CategoryChangeListener>();
+let categoryVersion = 0;
+
+/** Subscribe to custom/hidden category mutations (add/rename/delete/hide). */
+export function subscribeCategoryChanges(listener: CategoryChangeListener): () => void {
+  categoryChangeListeners.add(listener);
+  return () => { categoryChangeListeners.delete(listener); };
+}
+
+export function getCategoryVersion(): number {
+  return categoryVersion;
+}
+
+/** Call after a category mutation (not on cache-priming reads) to notify subscribers. */
+function notifyCategoryChange(): void {
+  categoryVersion += 1;
+  categoryChangeListeners.forEach((l) => l());
+}
 
 export function refreshCustomCategoryCache(): void {
   customImpactCache.clear();

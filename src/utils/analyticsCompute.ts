@@ -142,10 +142,11 @@ function cashflowSide(tx: AnalyticsRawTx): 'income' | 'expense' | null {
   if (isInvestmentExit(tx)) return 'income';
 
   const cat = storedCategoryKey(tx);
-  if (
-    cat === 'forex'
-    || cat === 'self_transfer' || cat === 'transfer' || cat === 'cancellation'
-  ) {
+  // Reversal of a prior hold/charge (e.g. Monobank pre-auth cancellation) —
+  // bucketed as expense but netted out via cashflowMagnitudeSign() so it
+  // reduces total expenses instead of vanishing as a phantom charge.
+  if (cat === 'cancellation') return 'expense';
+  if (cat === 'forex' || cat === 'self_transfer' || cat === 'transfer') {
     return null;
   }
 
@@ -160,9 +161,13 @@ function cashflowSide(tx: AnalyticsRawTx): 'income' | 'expense' | null {
   return null;
 }
 
+/** Cancellation rows undo a prior expense — sign-flip so they net out rather than double-count. */
+function cashflowMagnitudeSign(tx: AnalyticsRawTx): 1 | -1 {
+  return storedCategoryKey(tx) === 'cancellation' ? -1 : 1;
+}
+
 /** Cash P&L includes investment buys/sells; self-transfers optional via toggle. */
 function isAnalyticsTx(tx: AnalyticsRawTx, excludeSelfTransfers: boolean): boolean {
-  if (storedCategoryKey(tx) === 'cancellation') return false;
   if (storedCategoryKey(tx) === 'forex') return false;
   if (isInvestmentPurchase(tx) || isInvestmentExit(tx)) return true;
   if (isSelfTransferTx(tx)) return !excludeSelfTransfers;
@@ -184,8 +189,9 @@ function applyPnL(
     return;
   }
   const side = cashflowSide(tx);
-  if (side === 'income') bar.income += converted;
-  else if (side === 'expense') bar.expense += converted;
+  const signedConverted = converted * cashflowMagnitudeSign(tx);
+  if (side === 'income') bar.income += signedConverted;
+  else if (side === 'expense') bar.expense += signedConverted;
   if (feeConverted > 0) bar.expense += feeConverted;
 }
 
@@ -507,8 +513,9 @@ export function computeAnalytics(
         else existing.totalExpense += converted;
       } else {
         const side = cashflowSide(tx);
-        if (side === 'income') existing.totalIncome += converted;
-        else if (side === 'expense') existing.totalExpense += converted;
+        const signedConverted = converted * cashflowMagnitudeSign(tx);
+        if (side === 'income') existing.totalIncome += signedConverted;
+        else if (side === 'expense') existing.totalExpense += signedConverted;
       }
       // Fees count as expenses (also tracked separately for fees KPI)
       const feeExtra = feeAmountAsExpense(tx);
@@ -530,8 +537,9 @@ export function computeAnalytics(
         else share.expense += converted;
       } else {
         const side = cashflowSide(tx);
-        if (side === 'income') share.income += converted;
-        else if (side === 'expense') share.expense += converted;
+        const signedConverted = converted * cashflowMagnitudeSign(tx);
+        if (side === 'income') share.income += signedConverted;
+        else if (side === 'expense') share.expense += signedConverted;
       }
       if (feeExtraConverted > 0) share.expense += feeExtraConverted;
       accountShareMap.set(tx.account_id, share);

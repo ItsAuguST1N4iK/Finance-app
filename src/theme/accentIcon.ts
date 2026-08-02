@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
+import type { IconName } from '@howincodes/expo-dynamic-app-icon';
 import { DEFAULT_ACCENT } from './index';
 
 /** Stable launcher-icon keys — must match `@howincodes/expo-dynamic-app-icon` in app.json */
-export const ACCENT_ICON_BY_HEX: Record<string, string> = {
+export const ACCENT_ICON_BY_HEX: Record<string, IconName> = {
   '#3b82f6': 'blue',
   '#8b5cf6': 'violet',
   '#06b6d4': 'cyan',
@@ -19,7 +20,7 @@ export const ACCENT_ICON_BY_HEX: Record<string, string> = {
   '#0ea5e9': 'sky',
 };
 
-export function accentToIconName(hex: string): string {
+export function accentToIconName(hex: string): IconName {
   const key = (hex || DEFAULT_ACCENT).trim().toLowerCase();
   return ACCENT_ICON_BY_HEX[key] ?? 'blue';
 }

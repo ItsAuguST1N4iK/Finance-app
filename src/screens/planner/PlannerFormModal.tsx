@@ -77,6 +77,11 @@ export function PlannerFormModal({
       show(t.error, t.plannerFillRequired);
       return;
     }
+    const parsedAmount = parseFloat(amount.replace(',', '.'));
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      show(t.error, t.plannerFillRequired);
+      return;
+    }
     const resolvedAccountId = accountId || accounts.find((a) => a.id === 'acc_default')?.id || accounts[0]?.id;
     if (!resolvedAccountId) {
       show(t.error, t.plannerAccountError);
@@ -89,7 +94,7 @@ export function PlannerFormModal({
         accountId: resolvedAccountId,
         planType,
         name: name.trim(),
-        amount: parseFloat(amount.replace(',', '.')),
+        amount: parsedAmount,
         currency,
         source: source.trim() || undefined,
         notes: notes.trim() || undefined,
@@ -101,7 +106,7 @@ export function PlannerFormModal({
         accountId: resolvedAccountId,
         planType,
         name: name.trim(),
-        amount: parseFloat(amount.replace(',', '.')),
+        amount: parsedAmount,
         currency,
         source: source.trim() || undefined,
         notes: notes.trim() || undefined,

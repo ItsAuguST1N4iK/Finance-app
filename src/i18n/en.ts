@@ -104,6 +104,7 @@ export const en: Translations = {
   biometricFallback: 'Device passcode',
   biometricUnavailableTitle: 'Biometrics unavailable',
   biometricUnavailableBody: 'No fingerprint or Face ID is set up on this device.',
+  biometricSaveFailed: 'Could not save this setting. Please try again.',
   settingsHomeCurrency: 'Home Currency',
   settingsHomeCurrencyHint: 'Currency used to display the total balance on the home screen',
   settingsCurrencies: 'Display Currencies',

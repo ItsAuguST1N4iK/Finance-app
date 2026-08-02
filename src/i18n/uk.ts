@@ -104,6 +104,7 @@ export const uk: Translations = {
   biometricFallback: 'Код пристрою',
   biometricUnavailableTitle: 'Біометрія недоступна',
   biometricUnavailableBody: 'На цьому пристрої немає налаштованого відбитка або Face ID.',
+  biometricSaveFailed: 'Не вдалося зберегти налаштування. Спробуйте ще раз.',
   settingsHomeCurrency: 'Головна валюта',
   settingsHomeCurrencyHint: 'Валюта для відображення загального балансу на головному екрані',
   settingsCurrencies: 'Відображувані валюти',

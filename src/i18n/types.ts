@@ -111,6 +111,7 @@ export interface Translations {
   biometricFallback: string;
   biometricUnavailableTitle: string;
   biometricUnavailableBody: string;
+  biometricSaveFailed: string;
   settingsHomeCurrency: string;
   settingsHomeCurrencyHint: string;
   settingsCurrencies: string;
